@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElRobot Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff; --bg2:#f6f7f9; --bg3:#eef0f3; --line:#e4e7ec; --line2:#d3d8df;
+  --ink:#1b1f24; --ink2:#59616d; --ink3:#949ba6;
+  --accent:#e8590c; --accent-soft:#fff1e8; --ok:#2f9e44; --bad:#e03131; --info:#1c7ed6;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'IBM Plex Sans KR',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);overflow:hidden}
+button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:6px 12px;cursor:pointer}
+button:hover{background:var(--bg2)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+button.primary:hover{background:#343a42}
+button.small{font-size:12px;padding:3px 9px}
+input[type=number],input[type=text]{font:12px var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:6px 8px}
+input[type=number]{width:80px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--ink3)}
+
+.app{display:grid;grid-template-rows:50px 1fr var(--bottom-h,220px);grid-template-columns:280px 1fr 380px;height:100vh}
+header{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line)}
+.brand{font:600 14px var(--sans)}
+.status{display:flex;align-items:center;gap:7px;font:12px var(--mono);color:var(--ink2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);flex:none}
+.dot.on{background:var(--ok)} .dot.off{background:var(--bad)} .dot.warn{background:var(--accent)}
+.spacer{flex:1}
+.estop{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600;padding:6px 16px}
+.estop:hover{background:#c92a2a}
+
+aside{overflow:auto;background:var(--bg)}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.list-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.list-h h3{font:600 12px var(--sans);color:var(--ink2)}
+
+.motor{padding:10px 16px;cursor:pointer;border-left:3px solid transparent}
+.motor:hover{background:var(--bg2)}
+.motor.sel{background:var(--bg2);border-left-color:var(--accent)}
+.mrow{display:flex;align-items:center;gap:10px}
+.mid{font:600 12px var(--mono);width:14px;color:var(--ink2)}
+.motor.sel .mid{color:var(--accent)}
+.mname{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mval{font:500 14px var(--mono);text-align:right}
+.tog{width:32px;height:18px;border-radius:999px;background:var(--line2);position:relative;border:none;padding:0;flex:none}
+.tog:hover{background:var(--line2)}
+.tog::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:.15s}
+.tog.on{background:var(--accent)}
+.tog.on::after{left:16px}
+.chev{width:12px;color:var(--ink3);font-size:10px;transition:transform .15s}
+.motor.open .chev{transform:rotate(90deg)}
+.acc{display:none;margin:10px 0 4px 22px}
+.motor.open .acc{display:block}
+.acc .top{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3)}
+.acc .top .v{font:500 12px var(--mono);color:var(--ink)}
+.rng{display:flex;justify-content:space-between;font:10px var(--mono);color:var(--ink3);margin-top:-2px}
+.slider-wrap{position:relative;height:18px;margin-top:2px}
+.slider-wrap input{width:100%;position:relative;z-index:2;-webkit-appearance:none;appearance:none;background:transparent;height:18px}
+.slider-wrap input::-webkit-slider-runnable-track{height:3px;background:var(--line);border-radius:2px}
+.slider-wrap input::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);margin-top:-5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--accent)}
+.slider-wrap input:disabled::-webkit-slider-thumb{background:var(--ink3);box-shadow:0 0 0 1px var(--ink3)}
+.live-mark{position:absolute;top:3px;width:2px;height:12px;background:var(--info);z-index:1;pointer-events:none}
+
+main{position:relative;background:linear-gradient(180deg,#fbfbfc 0%,#eef0f3 100%)}
+#view{position:absolute;inset:0}
+.vbtns{position:absolute;right:12px;top:12px}
+.vbtns button{font-size:12px;padding:4px 10px;background:rgba(255,255,255,.85)}
+.hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--ink3);pointer-events:none}
+
+.dock{display:flex;flex-direction:column;min-height:0;min-width:0}
+.dock-body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+.tabs{display:flex;align-items:center;padding:0 6px 0 12px;border-bottom:1px solid var(--line);flex:none}
+.tablist{display:flex;gap:2px;flex:1;min-width:0;overflow-x:auto}
+.empty{margin:auto;font-size:12px;color:var(--ink3)}
+.plus-wrap{position:relative;flex:none}
+.plus{width:28px;height:28px;padding:0;border:none;border-radius:6px;background:none;font:400 18px/1 var(--sans);color:var(--ink3)}
+.plus:hover,.plus.on{background:var(--bg3);color:var(--ink)}
+.menu{display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:170px;background:var(--bg);border:1px solid var(--line2);border-radius:9px;box-shadow:0 8px 24px rgba(20,24,30,.12);padding:6px}
+.menu.show{display:block}
+footer.dock .menu{top:auto;bottom:calc(100% + 4px)}
+.menu label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+.menu label:hover{background:var(--bg2)}
+.menu label .where{margin-left:auto;font-size:11px;color:var(--ink3)}
+.menu .mh{font-size:11px;color:var(--ink3);padding:4px 8px 6px}
+.tab{border:none;border-radius:0;background:none;padding:13px 10px 11px;color:var(--ink3);font-weight:500;border-bottom:2px solid transparent}
+.tab:hover{background:none;color:var(--ink2)}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.pane{display:none;overflow:auto;flex:1;min-height:0;padding:18px 18px 28px}
+footer .pane{padding:12px 18px 14px}
+.pane.on{display:block}
+.pane h4{font:600 12px var(--sans);color:var(--ink2);margin:22px 0 8px}
+.pane h4:first-child{margin-top:0}
+
+.hero{display:flex;align-items:baseline;justify-content:space-between}
+.hero .t{font:600 15px var(--sans)}
+.hero .s{font-size:12px}
+.deg{font:500 34px var(--mono);margin:6px 0 2px;letter-spacing:-.02em}
+canvas.spark{display:block;width:100%;height:64px;margin-top:10px}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--ink3);margin-top:4px}
+.legend i{display:inline-block;width:10px;height:2px;margin-right:4px;vertical-align:middle}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:16px}
+.metric{background:var(--bg);padding:9px 10px}
+.metric .k{font-size:11px;color:var(--ink3)}
+.metric .v{font:500 14px var(--mono)}
+.note{margin-top:12px;padding:9px 11px;border-radius:7px;background:var(--accent-soft);color:#a33f08;font-size:12px}
+.note.bad{background:#fff0f0;color:var(--bad)}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+summary{cursor:pointer;font-weight:600;font-size:12px;color:var(--ink2)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font:12px var(--mono);margin-top:8px}
+.kv .k{color:var(--ink3)}
+.kv .v{text-align:right}
+.kv .grp{grid-column:1/-1;font:600 11px var(--sans);color:var(--ink2);margin-top:10px}
+
+.card{border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.active-name{font:600 14px var(--mono)}
+.files{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.file{display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--line)}
+.file:first-child{border-top:none}
+.file .n{flex:1;font:12px var(--mono);overflow:hidden;text-overflow:ellipsis}
+.file.act{background:var(--bg2)}
+.file .tagon{font-size:11px;color:var(--ok);font-weight:600}
+.newrow{display:flex;gap:6px}
+.newrow input{flex:1}
+.crow{display:grid;grid-template-columns:22px 1fr 44px;gap:8px;align-items:center;margin:7px 0;font:12px var(--mono)}
+.cbar{position:relative;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.cbar .fill{position:absolute;top:0;bottom:0;background:#ffd8bf;border-left:2px solid var(--accent);border-right:2px solid var(--accent)}
+.cbar .peak{position:absolute;top:0;bottom:0;background:#ffe8d9}
+.cbar .cur{position:absolute;top:0;bottom:0;width:2px;background:var(--info)}
+.cbar .exp{position:absolute;top:0;bottom:0;border:1px dashed var(--ink3)}
+.steps{font-size:12px;color:var(--ink2);padding-left:18px;margin:6px 0 10px}
+.ctable{width:100%;border-collapse:collapse;font:12px var(--mono)}
+.ctable th{font:500 11px var(--sans);color:var(--ink3);text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.ctable td{padding:5px 6px;border-bottom:1px solid var(--line)}
+pre.raw{font:11px/1.55 var(--mono);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;max-height:340px;white-space:pre;color:var(--ink2)}
+.setrow{display:flex;align-items:center;justify-content:space-between;margin:8px 0}
+.log{font:11px/1.65 var(--mono);color:var(--ink2);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:420px;overflow:auto}
+footer{grid-column:1/-1;border-top:1px solid var(--line)}
+.ctrl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 18px}
+.cell{padding:6px 8px}
+.cell .top{display:flex;align-items:baseline;gap:6px;font-size:12px}
+.cell .top .nm{font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .top .v{font:500 12px var(--mono)}
+.cell .top .id{font:600 11px var(--mono);color:var(--ink3)}
+
+.logpane{font:11px/1.65 var(--mono);color:var(--ink2)}
+input[type=range].plain{-webkit-appearance:none;appearance:none;background:transparent;height:18px}
+input[type=range].plain::-webkit-slider-runnable-track{height:3px;background:var(--line2);border-radius:2px}
+input[type=range].plain::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ink);margin-top:-5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--ink)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;display:none;z-index:20}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">ElRobot Console</div>
+    <div class="status"><span class="dot" id="conn"></span><span id="port">—</span></div>
+    <div class="status muted" id="busv"></div>
+    <div class="spacer"></div>
+    <button id="all-off">전체 토크 OFF</button>
+    <button class="estop" id="estop" title="Esc">E-STOP</button>
+  </header>
+
+  <aside id="left">
+    <div class="list-h"><h3>모터 <span class="muted mono" id="online"></span></h3>
+      <button class="small" id="all-on">전체 ON</button></div>
+    <div id="motors"></div>
+  </aside>
+
+  <main>
+    <div id="view"></div>
+    <div class="vbtns"><button id="cam-reset">시점 초기화</button></div>
+    <div class="hint">드래그 회전 · 휠 줌 · 우클릭 이동 · Esc 비상정지</div>
+  </main>
+
+  <aside id="right" class="dock" data-dock="right">
+    <div class="tabs"><div class="tablist"></div>
+      <div class="plus-wrap"><button class="plus" title="패널 추가·제거">+</button><div class="menu"></div></div></div>
+    <div class="dock-body"></div>
+  </aside>
+
+  <footer class="dock" data-dock="bottom">
+    <div class="tabs"><div class="tablist"></div>
+      <div class="plus-wrap"><button class="plus" title="패널 추가·제거">+</button><div class="menu"></div></div></div>
+    <div class="dock-body"></div>
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+<template id="tpl-motor"><section class="pane">
+      <div class="hero"><span class="t" data-k="d-title"></span><span class="s" data-k="d-status"></span></div>
+      <div class="deg" data-k="d-deg">—</div>
+      <div class="muted mono" style="font-size:12px" data-k="d-raw"></div>
+      <canvas class="spark" data-k="spark"></canvas>
+      <div class="legend"><span><i style="background:var(--info)"></i>위치</span><span><i style="background:var(--accent)"></i>부하</span><span><i style="background:var(--bad)"></i>전류</span><span style="margin-left:auto">최근 10초</span></div>
+      <div class="metrics" data-k="d-metrics"></div>
+      <div data-k="d-notes"></div>
+      <details><summary>레지스터 전체 (RAM · EEPROM)</summary><div class="kv" data-k="d-regs"></div>
+        <div style="margin-top:10px"><button class="small" data-k="refresh">EEPROM 다시 읽기</button></div></details>
+    </section></template>
+<template id="tpl-calib"><section class="pane">
+      <h4>사용 중인 파일</h4>
+      <div class="card" data-k="c-active"></div>
+
+      <h4>파일 목록</h4>
+      <div class="files" data-k="c-files"></div>
+      <div class="muted" style="font-size:11px;margin-top:6px">적용하면 토크가 꺼지고, 파일에 저장된 offset이 EEPROM에 다시 써집니다.</div>
+
+      <h4>새로 만들기</h4>
+      <div data-k="c-new">
+        <div class="newrow"><input type="text" data-k="c-name" placeholder="파일 이름 (예: follower_v1)"><button class="primary" data-k="c-start">기록 시작</button></div>
+        <div class="muted" style="font-size:11px;margin-top:6px">시작하면 모든 토크 OFF, offset 0, 각도 제한 0–4095로 초기화됩니다.</div>
+      </div>
+      <div data-k="c-rec" style="display:none">
+        <div class="card">
+          <div style="font-weight:600" data-k="c-recname"></div>
+          <ol class="steps">
+            <li>팔을 손으로 받치세요. 토크가 꺼져 있어 처집니다.</li>
+            <li>관절을 하나씩 <b>양 끝까지 천천히</b> 움직이세요.</li>
+            <li>끝에서 <b>0.1초 이상 멈춰야</b> 기록됩니다 (흔들림 ±1° 이내). 진한 주황이 저장될 범위, 옅은 주황은 순간 최대치(저장 안 됨), 점선은 URDF 기준입니다.</li>
+          </ol>
+          <div data-k="c-bars"></div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+            <button data-k="c-cancel">취소</button><button class="primary" data-k="c-finish">저장</button>
+          </div>
+        </div>
+      </div>
+
+      <h4>관절별 값</h4>
+      <div data-k="c-table"></div>
+
+      <h4>원문 <span class="muted mono" style="font-weight:400" data-k="c-path"></span></h4>
+      <pre class="raw" data-k="c-raw"></pre>
+    </section></template>
+<template id="tpl-sys"><section class="pane">
+      <h4>제어 설정 <span class="muted" style="font-weight:400">· 전체 모터 공통</span></h4>
+      <div class="setrow"><span>속도</span><b class="mono" data-k="v-speed"></b></div>
+      <input type="range" class="plain" data-k="s-speed" min="50" max="2000" step="50" style="width:100%">
+      <div class="setrow"><span>가속 <span class="muted">(0 = 제한 없음)</span></span><b class="mono" data-k="v-accel"></b></div>
+      <input type="range" class="plain" data-k="s-accel" min="0" max="254" step="2" style="width:100%">
+      <div class="setrow"><span>토크 제한</span><b class="mono" data-k="v-tl"></b></div>
+      <input type="range" class="plain" data-k="s-tl" min="0" max="1000" step="10" style="width:100%">
+      <div class="muted" style="font-size:11px;margin-top:10px">손을 떼면 바로 적용됩니다. 모터별 상한: 1–7번 60%, 8번 25% (7.4V 서보).</div>
+    </section></template>
+<template id="tpl-ctrl"><section class="pane"><div class="ctrl"></div></section></template>
+<template id="tpl-log"><section class="pane logpane"></section></template>
+<template id="tpl-cam"><section class="pane">
+  <div class="hero"><span class="t">iPhone LiDAR</span><span class="s" data-k="k-status"></span></div>
+  <div class="metrics" data-k="k-metrics"></div>
+  <h4>점군 표시</h4>
+  <div class="setrow"><span>보이기</span><input type="checkbox" data-k="k-show" checked></div>
+  <div class="setrow"><span>점 크기</span><b class="mono" data-k="k-size-v"></b></div>
+  <input type="range" class="plain" data-k="k-size" min="1" max="12" step="1" value="4" style="width:100%">
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button class="small" data-k="k-fit">점군에 시점 맞추기</button>
+    <button class="small" data-k="k-phone">iPhone 시점으로 보기</button>
+  </div>
+  <h4>AprilTag (36h11, 한 변 6cm)</h4>
+  <div data-k="k-tags" class="muted" style="font-size:12px"></div>
+  <div class="muted" style="font-size:11px;margin-top:10px">좌표계: ARKit 세계 좌표 (y 위쪽, 중력 기준). 로봇 좌표계 정렬은 다음 단계에서 태그로 맞춥니다.</div>
+</section></template>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+  "urdf-loader": "https://cdn.jsdelivr.net/npm/urdf-loader@0.12.3/src/URDFLoader.js"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import URDFLoader from 'urdf-loader';
+
+const MOTORS = [
+  {id:1, name:'J1 베이스', joint:'rev_motor_01'},
+  {id:2, name:'J2', joint:'rev_motor_02'},
+  {id:3, name:'J3', joint:'rev_motor_03'},
+  {id:4, name:'J4', joint:'rev_motor_04'},
+  {id:5, name:'J5', joint:'rev_motor_05'},
+  {id:6, name:'J6', joint:'rev_motor_06'},
+  {id:7, name:'J7', joint:'rev_motor_07'},
+  {id:8, name:'J8 그리퍼', joint:'rev_motor_08', note:'7.4V 서보를 12V로 구동 중입니다. 토크 상한 25%로 제한됩니다.'},
+];
+const STATUS_BITS = {0:'전압', 1:'엔코더', 2:'과열', 3:'과전류', 5:'과부하'};
+const $ = s => document.querySelector(s);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let S = null, sel = 1, ws, robot = null, limits = {};
+const hist = {}; MOTORS.forEach(m => hist[m.id] = []);
+const dragging = {};
+
+// ---------------------------------------------------------------- mapping (matches norma-core station-viewer)
+const arcOf = id => S?.calib?.motors?.[id];
+function norm(id, pos){
+  const a = arcOf(id); if(!a) return null;
+  const p = Math.max(0, Math.min(1, (pos - a.min) / (a.max - a.min)));
+  return a.invert ? 1 - p : p;
+}
+function jointAngle(id, p){ const L = limits[MOTORS[id-1].joint]; return L ? L.lower + p * (L.upper - L.lower) : 0; }
+function degOf(id, pos){ const p = norm(id, pos); return p == null ? null : jointAngle(id, p) * 180 / Math.PI; }
+const statusText = st => Object.entries(STATUS_BITS).filter(([b]) => st & (1 << b)).map(([,n]) => n);
+
+// ---------------------------------------------------------------- 3D
+const view = $('#view');
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(devicePixelRatio);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 20);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bec8, 1.6));
+const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(1, 2, 1.5); scene.add(dl);
+scene.add(new THREE.GridHelper(1.2, 24, 0xc3c8d0, 0xdde1e6));
+
+// iPhone point cloud lives in `world` (ARKit world frame, y up). Identity until the robot is registered.
+const CLOUD_MAX = 49152;
+const world = new THREE.Group(); scene.add(world);
+const cloudGeom = new THREE.BufferGeometry();
+cloudGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CLOUD_MAX * 3), 3));
+cloudGeom.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(CLOUD_MAX * 3), 3, true));
+cloudGeom.setDrawRange(0, 0);
+const cloudMat = new THREE.PointsMaterial({size: 0.004, vertexColors: true, sizeAttenuation: true});
+const cloud = new THREE.Points(cloudGeom, cloudMat);
+cloud.frustumCulled = false;
+world.add(cloud);
+const phone = (() => {  // camera frustum in ARKit camera axes: looks along -z, 4:3 image
+  const a = 0.04, b = 0.03, z = -0.06, v = [[0,0,0],[-a,b,z],[a,b,z],[a,-b,z],[-a,-b,z]];
+  const e = [0,1, 0,2, 0,3, 0,4, 1,2, 2,3, 3,4, 4,1, 1,2];
+  const g = new THREE.BufferGeometry().setFromPoints(e.map(i => new THREE.Vector3(...v[i])));
+  const o = new THREE.LineSegments(g, new THREE.LineBasicMaterial({color: 0x1c7ed6}));
+  o.matrixAutoUpdate = false; o.visible = false; world.add(o); return o;
+})();
+const camInfo = {T: null, n: 0, hz: 0, _t: [], fitted: false};
+
+const MAT = {
+  body: new THREE.MeshStandardMaterial({color:0xe9ebee, roughness:.6}),
+  servo: new THREE.MeshStandardMaterial({color:0x2b2f36, roughness:.45, metalness:.15}),
+  sel: new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.4}),
+  err: new THREE.MeshStandardMaterial({color:0xe03131, roughness:.4}),
+};
+function resetCam(){
+  const c = new THREE.Vector3(0, 0.2, 0); let r = 0.35;
+  if(robot){ const sph = new THREE.Box3().setFromObject(robot).getBoundingSphere(new THREE.Sphere()); c.copy(sph.center); r = sph.radius; }
+  const d = r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  camera.position.copy(c).add(new THREE.Vector3(0.62, 0.42, 0.66).normalize().multiplyScalar(d));
+  controls.target.copy(c); controls.update();
+}
+resetCam();
+const manager = new THREE.LoadingManager();
+manager.onLoad = () => { paintRobot(); resetCam(); };  // fires once every STL mesh has arrived
+new URDFLoader(manager).load('/robot/elrobot_follower.urdf', r => {
+  robot = r;
+  robot.rotation.set(-Math.PI/2, 0, -Math.PI/2);
+  for(const [n, j] of Object.entries(robot.joints)) if(j.limit) limits[n] = {lower:+j.limit.lower, upper:+j.limit.upper};
+  scene.add(robot);
+  updateRobot();
+});
+function servoIdOf(mesh){
+  for(let o = mesh; o; o = o.parent){ const m = /^ST3215_(\d)_/.exec(o.name || ''); if(m) return +m[1]; if(o.isURDFJoint) break; }
+  return null;
+}
+function paintRobot(){
+  if(!robot) return;
+  robot.traverse(o => {
+    if(!o.isMesh) return;
+    const sid = servoIdOf(o), m = sid && S?.motors?.[sid];
+    o.material = sid == null ? MAT.body : (m && (m.online === false || m.status)) ? MAT.err : sid === sel ? MAT.sel : MAT.servo;
+  });
+}
+function updateRobot(){
+  if(!robot || !S) return;
+  for(const m of MOTORS){
+    const live = S.motors?.[m.id], p = live ? norm(m.id, live.pos) : null, pp = p ?? 0.5;
+    if(m.id === 8){
+      // norma-core: gripper value = upper - (lower + p*range); jaws follow via URDF <mimic>
+      const L = limits.rev_motor_08; if(L) robot.setJointValue('rev_motor_08', L.upper - (L.lower + pp * (L.upper - L.lower)));
+    } else robot.setJointValue(m.joint, jointAngle(m.id, pp));
+  }
+}
+function resize(){ const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(view); resize();
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+// ---------------------------------------------------------------- slider views (left accordion + every 조작 panel)
+const SLIDER_HTML = `<div class="slider-wrap"><div class="live-mark"></div><input type="range" min="0" max="4095" disabled></div>
+    <div class="rng"><span class="lo"></span><span class="hi"></span></div>`;
+function bindSlider(sv){
+  const id = +sv.dataset.mid, inp = sv.querySelector('input');
+  let last = 0, drag = false;
+  // disabled ranges still receive pointer events, so gate on .disabled
+  inp.addEventListener('pointerdown', () => { if(!inp.disabled){ drag = true; dragging[id] = true; } });
+  window.addEventListener('pointerup', () => { if(drag){ drag = false; dragging[id] = false; send({type:'goal', id, raw:+inp.value}); } });
+  inp.addEventListener('input', () => {
+    for(const x of document.querySelectorAll(`.sv[data-mid="${id}"] input`)) if(x !== inp) x.value = inp.value;  // keep every view in step
+    const t = performance.now(); if(t - last > 40){ last = t; send({type:'goal', id, raw:+inp.value}); }
+  });
+}
+function renderSlider(el, m, live, ram, a){
+  const inp = el.querySelector('input'), mark = el.querySelector('.live-mark');
+  if(a){
+    inp.min = a.min; inp.max = a.max;
+    inp.disabled = !(ram?.torque && live?.online) || S.calibrating;
+    if(!dragging[m.id]) inp.value = ram?.torque ? (ram.goal ?? live?.pos) : (live?.pos ?? 2048);
+    if(live){ const f = Math.max(0, Math.min(1, (live.pos - a.min) / (a.max - a.min))); mark.style.left = `calc(6px + ${f} * (100% - 12px) - 1px)`; }
+    const gd = degOf(m.id, +inp.value);
+    el.querySelector('.v').textContent = gd == null ? '—' : `${ram?.torque ? '→ ' : ''}${gd.toFixed(1)}°`;
+    el.querySelector('.lo').textContent = `${degOf(m.id, a.min).toFixed(0)}°`;
+    el.querySelector('.hi').textContent = `${degOf(m.id, a.max).toFixed(0)}°`;
+  } else {
+    // uncalibrated: show the raw encoder position on a locked full-turn slider
+    inp.min = 0; inp.max = 4095; inp.disabled = true; inp.value = live?.pos ?? 2048;
+    if(live) mark.style.left = `calc(6px + ${live.pos / 4095} * (100% - 12px) - 1px)`;
+    el.querySelector('.v').textContent = live ? `raw ${live.pos}` : '—';
+    el.querySelector('.lo').textContent = '미캘리브레이션'; el.querySelector('.hi').textContent = '';
+  }
+}
+
+// ---------------------------------------------------------------- motor list
+for(const m of MOTORS){
+  const el = document.createElement('div');
+  el.className = 'motor'; el.dataset.id = m.id;
+  el.innerHTML = `
+    <div class="mrow">
+      <span class="chev">▶</span><span class="dot"></span><span class="mid">${m.id}</span>
+      <span class="mname">${m.name}</span>
+      <span class="mval">—</span>
+      <button class="tog" title="토크"></button>
+    </div>
+    <div class="acc sv" data-mid="${m.id}">
+      <div class="top"><span>각도</span><span class="v">—</span></div>
+      ${SLIDER_HTML}
+    </div>`;
+  el.querySelector('.mrow').addEventListener('click', e => { if(e.target.closest('.tog')) return; toggleOpen(m.id); });
+  el.querySelector('.tog').addEventListener('click', () => send({type:'torque', id:m.id, on:!S?.ram?.[m.id]?.torque}));
+  bindSlider(el.querySelector('.sv'));
+  $('#motors').appendChild(el);
+  m.el = el;
+}
+let openId = null;
+function toggleOpen(id){
+  openId = openId === id ? null : id;
+  document.querySelectorAll('.motor').forEach(e => e.classList.toggle('open', +e.dataset.id === openId));
+  select(id);
+}
+function select(id){
+  sel = id;
+  document.querySelectorAll('.motor').forEach(e => e.classList.toggle('sel', +e.dataset.id === id));
+  paintRobot(); if(S) renderPanels('motor');
+}
+function renderList(){
+  let online = 0;
+  for(const m of MOTORS){
+    const live = S.motors?.[m.id], ram = S.ram?.[m.id], el = m.el;
+    if(live?.online) online++;
+    const err = live && (live.status || live.temp >= 55);
+    el.querySelector('.dot').className = 'dot ' + (!live?.online || err ? 'off' : ram?.torque ? 'warn' : 'on');
+    const d = live ? degOf(m.id, live.pos) : null;
+    el.querySelector('.mval').textContent = !live?.online ? 'offline' : d == null ? `${live.pos}` : `${d.toFixed(1)}°`;
+    el.querySelector('.tog').classList.toggle('on', !!ram?.torque);
+  }
+  $('#online').textContent = `${online}/8`;
+  for(const sv of document.querySelectorAll('.sv')){
+    const id = +sv.dataset.mid;
+    if(sv.classList.contains('acc') && id !== openId) continue;
+    renderSlider(sv, MOTORS[id-1], S.motors?.[id], S.ram?.[id], arcOf(id));
+  }
+}
+
+// ---------------------------------------------------------------- panels: each dock gets its own instance
+const q = (root, k) => root.querySelector(`[data-k="${k}"]`);
+const kv = rows => rows.map(r => r.length === 1 ? `<div class="grp">${r[0]}</div>` : `<div class="k">${r[0]}</div><div class="v">${r[1]}</div>`).join('');
+const fmtSet = {speed: v => `${v} st/s`, accel: v => `${v}`, tl: v => `${(v / 10).toFixed(0)}%`};
+
+const PANEL_DEFS = {
+  sys: {
+    name: '시스템',
+    init(P){
+      for(const k of ['speed', 'accel', 'tl']){
+        const el = q(P.root, `s-${k}`);
+        el.addEventListener('input', () => { P.drag = true; q(P.root, `v-${k}`).textContent = fmtSet[k](+el.value); });
+        el.addEventListener('change', () => { P.drag = false; send({type:'settings', speed:+q(P.root, 's-speed').value, accel:+q(P.root, 's-accel').value, torque_limit:+q(P.root, 's-tl').value}); });
+      }
+    },
+    render(P){
+      if(P.drag) return;
+      const st = S.settings, vals = {speed:st.speed, accel:st.accel, tl:st.torque_limit};
+      for(const k in vals){ q(P.root, `s-${k}`).value = vals[k]; q(P.root, `v-${k}`).textContent = fmtSet[k](vals[k]); }
+    },
+  },
+  motor: {
+    name: '모터',
+    init(P){ q(P.root, 'refresh').addEventListener('click', () => send({type:'refresh'})); },
+    render(P){
+      const r = P.root, m = MOTORS[sel-1], live = S.motors?.[sel], ram = S.ram?.[sel], e = S.eeprom?.[sel], a = arcOf(sel);
+      q(r, 'd-title').textContent = `${sel} · ${m.name}`;
+      const st = live ? statusText(live.status) : [];
+      q(r, 'd-status').innerHTML = !live?.online ? '<span style="color:var(--bad)">offline</span>' : st.length ? `<span style="color:var(--bad)">${st.join(' · ')}</span>` : ram?.torque ? '<span style="color:var(--accent)">토크 ON</span>' : '<span class="muted">토크 OFF</span>';
+      const d = live ? degOf(sel, live.pos) : null;
+      q(r, 'd-deg').textContent = d == null ? (live ? 'uncal' : '—') : `${d.toFixed(1)}°`;
+      q(r, 'd-raw').textContent = live ? `raw ${live.pos}` + (a ? `  ·  범위 ${a.min}–${a.max}` : '') : '';
+      q(r, 'd-metrics').innerHTML = live ? [
+        ['부하', `${(live.load/10).toFixed(1)}%`], ['전류', `${Math.round(live.current_ma)} mA`], ['온도', `${live.temp}°C`],
+        ['전압', `${live.voltage.toFixed(1)} V`], ['속도', `${live.speed}`], ['목표', ram?.torque ? ram.goal : '—'],
+      ].map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('') : '';
+      const notes = [];
+      if(m.note) notes.push(`<div class="note">${m.note}</div>`);
+      if(!a) notes.push(`<div class="note">캘리브레이션 전이라 슬라이더 조작이 막혀 있습니다.</div>`);
+      if(st.length) notes.push(`<div class="note bad">상태 오류: ${st.join(', ')}</div>`);
+      q(r, 'd-notes').innerHTML = notes.join('');
+      const regs = q(r, 'd-regs');
+      if(regs.closest('details').open) regs.innerHTML = kv([
+        ['RAM'], ...(ram ? [['torque', ram.torque], ['goal', ram.goal], ['goal_speed', ram.goal_speed], ['accel', ram.accel], ['torque_limit', `${ram.torque_limit} (cap ${S.torque_cap?.[sel]})`], ['lock', ram.lock]] : []),
+        ['EEPROM'], ...(e ? Object.entries(e) : []),
+      ]);
+      drawSpark(q(r, 'spark'));
+    },
+  },
+  calib: {
+    name: '캘리브레이션',
+    init(P){
+      const r = P.root;
+      q(r, 'c-files').addEventListener('click', e => { const n = e.target.dataset.apply; if(n) send({type:'calib_select', name:n}); });
+      q(r, 'c-table').addEventListener('change', e => { const id = e.target.dataset.inv; if(id) send({type:'invert', id:+id, on:e.target.checked}); });
+      q(r, 'c-start').addEventListener('click', () => send({type:'calib_new', name:q(r, 'c-name').value.trim()}));
+      q(r, 'c-cancel').addEventListener('click', () => send({type:'calib_cancel'}));
+      q(r, 'c-finish').addEventListener('click', () => { send({type:'calib_finish'}); toast('캘리브레이션 저장 중…'); });
+    },
+    render(P){
+      const r = P.root, c = S.calib || {}, n = Object.keys(c.motors || {}).length;
+      q(r, 'c-active').innerHTML = c.name
+        ? `<div class="active-name">${esc(c.name)}</div><div class="muted" style="font-size:12px;margin-top:2px">${n}/8 관절 · ${esc(c.created || '')}</div>`
+        : `<div class="muted">선택된 파일 없음 — 새로 만들거나 목록에서 적용하세요.</div>`;
+      const fkey = JSON.stringify(S.calib_files) + c.name + S.calibrating;
+      if(fkey !== P.files){
+        P.files = fkey;
+        q(r, 'c-files').innerHTML = (S.calib_files || []).length ? S.calib_files.map(f => `
+          <div class="file ${f.name === c.name ? 'act' : ''}">
+            <span class="n">${esc(f.name)}</span><span class="muted mono" style="font-size:11px">${f.motors ?? '?'}/8 · ${esc(f.mtime)}</span>
+            ${f.name === c.name ? '<span class="tagon">사용 중</span>' : `<button class="small" data-apply="${esc(f.name)}" ${S.calibrating ? 'disabled' : ''}>적용</button>`}
+          </div>`).join('') : '<div class="file muted">저장된 파일 없음</div>';
+      }
+      q(r, 'c-new').style.display = S.calibrating ? 'none' : '';
+      q(r, 'c-rec').style.display = S.calibrating ? '' : 'none';
+      if(S.calibrating){ q(r, 'c-recname').textContent = `기록 중: ${S.new_name || ''}`; q(r, 'c-bars').innerHTML = calibBars(); }
+      const tkey = JSON.stringify(c.motors);
+      if(tkey !== P.table){
+        P.table = tkey;
+        q(r, 'c-table').innerHTML = n ? `<table class="ctable"><tr><th>ID</th><th>min–max</th><th>범위</th><th>offset</th><th>반전</th></tr>` +
+          MOTORS.map(m => { const a = c.motors[m.id]; return a
+            ? `<tr><td>${m.id}</td><td>${a.min}–${a.max}</td><td>${((a.max - a.min) * 360 / 4096).toFixed(0)}°</td><td>${a.offset}</td><td><input type="checkbox" data-inv="${m.id}" ${a.invert ? 'checked' : ''}></td></tr>`
+            : `<tr><td>${m.id}</td><td colspan="4" class="muted">기록 없음</td></tr>`; }).join('') + '</table>'
+          : '<div class="muted" style="font-size:12px">값 없음</div>';
+      }
+      q(r, 'c-path').textContent = c.name ? `calibrations/${c.name}.json` : '';
+      if(S.calib_raw !== P.raw){ P.raw = S.calib_raw; q(r, 'c-raw').textContent = S.calib_raw || '—'; }
+    },
+  },
+  log: {
+    name: '로그',
+    init(){},
+    render(P){
+      const txt = (S.log || []).join('\n');
+      if(txt !== P.log){ P.log = txt; P.root.innerHTML = (S.log || []).map(l => `<div>${esc(l)}</div>`).join(''); P.root.scrollTop = P.root.scrollHeight; }
+    },
+  },
+  ctrl: {
+    name: '조작',
+    init(P){
+      const grid = P.root.querySelector('.ctrl');
+      for(const m of MOTORS){
+        grid.insertAdjacentHTML('beforeend', `<div class="cell sv" data-mid="${m.id}">
+          <div class="top"><span class="id">${m.id}</span><span class="nm">${m.name}</span><span class="v">—</span></div>${SLIDER_HTML}</div>`);
+        bindSlider(grid.lastElementChild);
+      }
+    },
+    render(){},  // sliders are refreshed by renderList for every view
+  },
+  cam: {
+    name: '카메라',
+    init(P){
+      const r = P.root;
+      q(r, 'k-show').addEventListener('change', e => { cloud.visible = e.target.checked; });
+      q(r, 'k-size').addEventListener('input', e => { cloudMat.size = +e.target.value / 1000; });
+      q(r, 'k-fit').addEventListener('click', fitCloud);
+      q(r, 'k-phone').addEventListener('click', viewFromPhone);
+    },
+    render(P){
+      const r = P.root, c = S.camera || {};
+      q(r, 'k-status').innerHTML = c.connected ? '<span style="color:var(--ok)">연결됨</span>' : `<span style="color:var(--bad)">${esc(c.error || '연결 안 됨')}</span>`;
+      q(r, 'k-metrics').innerHTML = [
+        ['수신', `${c.fps ?? 0} fps`], ['화면 갱신', `${camInfo.hz} Hz`], ['점 개수', `${(camInfo.n || 0).toLocaleString()}`],
+      ].map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+      q(r, 'k-size-v').textContent = `${(cloudMat.size * 1000).toFixed(0)} mm`;
+      const tags = Object.entries(c.tags || {});
+      q(r, 'k-tags').innerHTML = tags.length ? tags.map(([id, t]) => `<div class="mono">ID ${id} · ${t.dist_m.toFixed(3)} m</div>`).join('') : '검출된 태그 없음';
+    },
+  },
+};
+const PANEL_ORDER = ['sys', 'motor', 'calib', 'log', 'ctrl', 'cam'];
+
+function drawSpark(canvas){
+  const h = hist[sel], dpr = devicePixelRatio, W = canvas.clientWidth * dpr, H = canvas.clientHeight * dpr;
+  if(!W) return;
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+  g.strokeStyle = '#e4e7ec'; g.lineWidth = dpr; g.beginPath(); g.moveTo(0, H/2); g.lineTo(W, H/2); g.stroke();
+  if(h.length < 2) return;
+  const t0 = h[h.length-1].t - 10;
+  const line = (key, color, lo, hi) => {
+    g.strokeStyle = color; g.lineWidth = 1.5 * dpr; g.beginPath();
+    h.forEach((s, i) => { const x = (s.t - t0) / 10 * W, y = H - 3*dpr - (Math.max(lo, Math.min(hi, s[key])) - lo) / (hi - lo) * (H - 6*dpr); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+  };
+  const ps = h.map(s => s.pos); let lo = Math.min(...ps), hi = Math.max(...ps); if(hi - lo < 40){ const c = (hi + lo) / 2; lo = c - 20; hi = c + 20; }
+  line('load', '#e8590c', -1000, 1000); line('cur', '#e03131', -1500, 1500); line('pos', '#1c7ed6', lo, hi);
+}
+function calibBars(){
+  return MOTORS.map(m => {
+    const r = S.rec?.[m.id], L = limits[m.joint];
+    if(!r) return `<div class="crow"><span>${m.id}</span><div class="cbar"></div><span class="muted">—</span></div>`;
+    const span = r.hi - r.lo, base = r.lo - Math.max(0, (4096 - span) / 2), W = 4096, pct = v => `${((v - base) / W * 100).toFixed(2)}%`;
+    const expDeg = L ? (L.upper - L.lower) * 180 / Math.PI : 0, expSteps = expDeg / 360 * 4096, mid = (r.lo + r.hi) / 2, spanDeg = span * 360 / 4096;
+    return `<div class="crow"><span>${m.id}</span><div class="cbar">
+        ${expDeg ? `<div class="exp" style="left:${pct(mid - expSteps/2)};width:${(expSteps / W * 100).toFixed(2)}%"></div>` : ''}
+        <div class="peak" style="left:${pct(r.plo ?? r.lo)};width:${(((r.phi ?? r.hi) - (r.plo ?? r.lo)) / W * 100).toFixed(2)}%"></div>
+        <div class="fill" style="left:${pct(r.lo)};width:${(span / W * 100).toFixed(2)}%"></div>
+        <div class="cur" style="left:${pct(r.acc)}"></div></div>
+      <span style="color:${expDeg && spanDeg > expDeg * 0.8 ? 'var(--ok)' : 'var(--ink)'}">${spanDeg.toFixed(0)}°</span></div>`;
+  }).join('');
+}
+
+// ---------------------------------------------------------------- header
+function renderHeader(){
+  $('#conn').className = 'dot ' + (S.connected ? 'on' : 'off');
+  $('#port').textContent = S.connected ? (S.port || '').replace('/dev/cu.', '') : (S.error || '연결 끊김');
+  const ms = Object.values(S.motors || {}).filter(m => m.online);
+  $('#busv').textContent = ms.length ? `${(ms.reduce((s, m) => s + m.voltage, 0) / ms.length).toFixed(1)} V · 최고 ${Math.max(...ms.map(m => m.temp))}°C` : '';
+}
+$('#all-on').addEventListener('click', () => send({type:'torque', id:'all', on:true}));
+$('#all-off').addEventListener('click', () => send({type:'torque', id:'all', on:false}));
+$('#estop').addEventListener('click', () => send({type:'estop'}));
+window.addEventListener('keydown', e => { if(e.key === 'Escape') send({type:'estop'}); });
+$('#cam-reset').addEventListener('click', resetCam);
+
+// ---------------------------------------------------------------- docks (right sidebar / bottom bar)
+const DOCKS = ['right', 'bottom'];
+const DOCK_NAMES = {right:'오른쪽', bottom:'하단'};
+const DEFAULT_LAYOUT = {right:['motor', 'calib', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'motor', bottom:'ctrl'}};
+let layout = structuredClone(DEFAULT_LAYOUT);
+try { const l = JSON.parse(localStorage.getItem('elrobot.layout')); if(l?.right && l?.bottom && l?.active) layout = l; } catch {}
+if(!layout.right.includes('cam') && !layout.bottom.includes('cam')) layout.right.push('cam');  // panel added after layouts were saved
+const dockEl = d => document.querySelector(`.dock[data-dock="${d}"]`);
+const inst = {right:{}, bottom:{}};  // dock -> panel id -> {root, ...render cache}
+function saveLayout(){ try { localStorage.setItem('elrobot.layout', JSON.stringify(layout)); } catch {} }
+function getInst(d, id){
+  if(!inst[d][id]){
+    const P = {root: $(`#tpl-${id}`).content.firstElementChild.cloneNode(true)};
+    PANEL_DEFS[id].init(P);
+    inst[d][id] = P;
+  }
+  return inst[d][id];
+}
+function renderDocks(){
+  for(const d of DOCKS){
+    const el = dockEl(d), body = el.querySelector('.dock-body'), ids = layout[d];
+    if(!ids.includes(layout.active[d])) layout.active[d] = ids[0] ?? null;
+    el.querySelector('.tablist').innerHTML = ids.map(id => `<button class="tab ${id === layout.active[d] ? 'on' : ''}" data-p="${id}">${PANEL_DEFS[id].name}</button>`).join('');
+    for(const id of Object.keys(inst[d])) if(!ids.includes(id)){ inst[d][id].root.remove(); delete inst[d][id]; }
+    body.querySelector('.empty')?.remove();
+    for(const id of ids){ const P = getInst(d, id); body.appendChild(P.root); P.root.classList.toggle('on', id === layout.active[d]); }
+    if(!ids.length) body.insertAdjacentHTML('beforeend', '<div class="empty">+ 버튼으로 패널을 추가하세요</div>');
+  }
+  // an empty bottom bar shrinks to its tab strip
+  document.documentElement.style.setProperty('--bottom-h', layout.bottom.length ? '220px' : '41px');
+  saveLayout();
+  if(S) render();
+}
+function renderPanels(only){
+  for(const d of DOCKS){
+    const id = layout.active[d];
+    if(id && (!only || only === id)) PANEL_DEFS[id].render(inst[d][id]);
+  }
+}
+function renderMenu(d){
+  const other = d === 'right' ? 'bottom' : 'right';
+  dockEl(d).querySelector('.menu').innerHTML = `<div class="mh">${DOCK_NAMES[d]}에 표시할 패널</div>` + PANEL_ORDER.map(id => `
+    <label><input type="checkbox" data-p="${id}" ${layout[d].includes(id) ? 'checked' : ''}>${PANEL_DEFS[id].name}
+      ${layout[other].includes(id) ? `<span class="where">${DOCK_NAMES[other]}에도 있음</span>` : ''}</label>`).join('');
+}
+function closeMenus(){
+  document.querySelectorAll('.menu').forEach(m => m.classList.remove('show'));
+  document.querySelectorAll('.plus').forEach(p => p.classList.remove('on'));
+}
+for(const d of DOCKS){
+  const el = dockEl(d), menu = el.querySelector('.menu'), plus = el.querySelector('.plus');
+  el.querySelector('.tablist').addEventListener('click', e => {
+    const id = e.target.dataset.p; if(!id) return;
+    layout.active[d] = id; renderDocks();
+  });
+  plus.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = !menu.classList.contains('show');
+    closeMenus();
+    if(open){ renderMenu(d); menu.classList.add('show'); plus.classList.add('on'); }
+  });
+  menu.addEventListener('click', e => e.stopPropagation());
+  menu.addEventListener('change', e => {
+    const id = e.target.dataset.p;
+    if(e.target.checked){ layout[d] = [...layout[d], id]; layout.active[d] = id; }
+    else layout[d] = layout[d].filter(x => x !== id);
+    renderDocks(); renderMenu(d);
+  });
+}
+document.addEventListener('click', closeMenus);
+renderDocks();
+function toast(t){ const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', 2500); }
+
+function render(){
+  renderHeader(); renderList(); updateRobot(); paintRobot(); renderPanels();
+}
+
+// ---------------------------------------------------------------- websocket
+function send(o){ if(ws?.readyState === 1) ws.send(JSON.stringify(o)); }
+let logLen = 0;
+function connect(){
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => {
+    S = JSON.parse(ev.data);
+    for(const m of MOTORS){
+      const l = S.motors?.[m.id];
+      if(l?.online){ const h = hist[m.id]; if(!h.length || h[h.length-1].t !== l.t){ h.push({t:l.t, pos:l.pos, load:l.load, cur:l.current_ma}); while(h[0].t < l.t - 10) h.shift(); } }
+    }
+    render();
+    const L = S.log || [];
+    if(logLen && L.length !== logLen){ const nl = L[L.length-1]; if(/실패|저장|적용/.test(nl)) toast(nl.slice(9)); }
+    logLen = L.length;
+  };
+  ws.onclose = () => { $('#conn').className = 'dot off'; $('#port').textContent = '서버 연결 끊김 — 재시도 중'; setTimeout(connect, 1000); };
+}
+connect();
+select(1);
+
+// ---------------------------------------------------------------- iPhone point cloud stream
+function connectCam(){
+  const cws = new WebSocket(`ws://${location.host}/ws_cam`);
+  cws.binaryType = 'arraybuffer';
+  cws.onmessage = ev => {
+    const buf = ev.data, n = Math.min(new Uint32Array(buf, 0, 1)[0], CLOUD_MAX);
+    const T = new Float32Array(buf, 4, 16);                       // column-major, as three.js expects
+    const pos = new Float32Array(buf, 68, n * 3), col = new Uint8Array(buf, 68 + n * 12, n * 3);
+    cloudGeom.attributes.position.array.set(pos); cloudGeom.attributes.position.needsUpdate = true;
+    cloudGeom.attributes.color.array.set(col); cloudGeom.attributes.color.needsUpdate = true;
+    cloudGeom.setDrawRange(0, n);
+    phone.matrix.fromArray(T); phone.matrixWorldNeedsUpdate = true; phone.visible = true;
+    camInfo.T = new THREE.Matrix4().fromArray(T); camInfo.n = n;
+    const now = performance.now(); camInfo._t.push(now); while(camInfo._t[0] < now - 1000) camInfo._t.shift(); camInfo.hz = camInfo._t.length;
+    if(!camInfo.fitted && n > 500){ camInfo.fitted = true; fitCloud(); }
+  };
+  cws.onclose = () => setTimeout(connectCam, 1500);
+}
+function fitCloud(){
+  const n = cloudGeom.drawRange.count; if(!n) return;
+  cloudGeom.computeBoundingSphere();
+  const sph = cloudGeom.boundingSphere.clone().applyMatrix4(world.matrixWorld);
+  const d = sph.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  camera.position.copy(sph.center).add(new THREE.Vector3(0.62, 0.42, 0.66).normalize().multiplyScalar(d));
+  controls.target.copy(sph.center); controls.update();
+}
+function viewFromPhone(){
+  if(!camInfo.T) return;
+  const m = new THREE.Matrix4().multiplyMatrices(world.matrixWorld, camInfo.T);
+  const p = new THREE.Vector3().setFromMatrixPosition(m), fwd = new THREE.Vector3(0, 0, -1).transformDirection(m);
+  camera.position.copy(p); controls.target.copy(p.clone().add(fwd.multiplyScalar(0.5))); controls.update();
+}
+connectCam();
+</script>
+</body>
+</html>

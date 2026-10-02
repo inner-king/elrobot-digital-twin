@@ -1,0 +1,10 @@
+# Record3DStream SDK: personal-use license, redistribution prohibited — fetch it yourself (see README)
+camera/r3ds_sdk/
+# local build of CycloneDDS 0.10.5 (see README)
+camera/cyclonedds-*/
+# captured iPhone frames (contain photos of the room)
+camera/*.npz
+__pycache__/
+*.pyc
+.DS_Store
+.venv/

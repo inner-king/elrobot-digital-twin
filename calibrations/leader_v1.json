@@ -1,0 +1,65 @@
+{
+  "name": "leader_v1",
+  "robot": "elrobot_follower",
+  "created": "2026-10-02 23:11:16",
+  "port": "/dev/cu.usbmodem5AF71734821",
+  "format": "raw arc in offset frame; angle = lower + p*(upper-lower)",
+  "motors": {
+    "1": {
+      "min": 1037,
+      "max": 3060,
+      "offset": 1940,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "2": {
+      "min": 998,
+      "max": 3098,
+      "offset": 1785,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "3": {
+      "min": 906,
+      "max": 3190,
+      "offset": 1887,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "4": {
+      "min": 894,
+      "max": 3202,
+      "offset": -1797,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "5": {
+      "min": 124,
+      "max": 3972,
+      "offset": -715,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "6": {
+      "min": 1061,
+      "max": 3035,
+      "offset": -1706,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "7": {
+      "min": 29,
+      "max": 4068,
+      "offset": -1045,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    },
+    "8": {
+      "min": 1378,
+      "max": 2718,
+      "offset": 1792,
+      "invert": false,
+      "time": "2026-10-02 23:11:16"
+    }
+  }
+}
