@@ -118,8 +118,11 @@ def _hull_json(parts, c):
     return {"v": np.round(np.vstack(v), 4).tolist(), "f": np.vstack(f).tolist()}
 
 
-def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
-    """torque_frac: 8 fractions of the stall torque the real servos are allowed (torque_limit register ∧ console cap).
+def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None, env_parts=None, floor_z=None):
+    """env_parts: convex hulls (base frame) of the other objects near by — static, they touch the object only — and
+    floor_z the floor under everything: then the support is what is really there (an infinite plane at the board's
+    height held up a strawberry set down past the board's edge; the live physics dropped it 12 mm to the floor).
+    torque_frac: 8 fractions of the stall torque the real servos are allowed (torque_limit register ∧ console cap).
     Every joint is a force-limited position servo (elrobot.xml kp), so the arm sags/stalls and the jaws stop on the
     object like the real ones; frames record the *simulated* joints, the jaw contact force and the gripper torque."""
     import mujoco
@@ -150,8 +153,13 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
     # [ours] the support collides with the object only (contype/conaffinity bit 2): it is an infinite plane, and at
     # cutting-board height (12 mm) the robot base standing on the floor sat inside it — the friction held joint 1 back
     # 25° and the jaws closed 10 cm beside the object. The arm vs. the support is the planner's scene-point check.
-    spec.worldbody.add_geom(name="support", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1, 1, 0.01], pos=[0, 0, support_h],
+    plane_z = floor_z if (env_parts and floor_z is not None) else support_h
+    spec.worldbody.add_geom(name="support", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[1, 1, 0.01], pos=[0, 0, plane_z],
                             friction=[OBJ_MU, 0.005, 0.0001], contype=2, conaffinity=2)
+    for j, e in enumerate(env_parts or []):
+        spec.add_mesh(name=f"env{j}", uservert=np.asarray(e.vertices).ravel().tolist(), userface=np.asarray(e.faces).ravel().tolist())
+        spec.worldbody.add_geom(name=f"env{j}", type=mujoco.mjtGeom.mjGEOM_MESH, meshname=f"env{j}",
+                                friction=[OBJ_MU, 0.005, 0.0001], contype=2, conaffinity=2)
     body = spec.worldbody.add_body(name="object", pos=c.tolist())
     body.add_freejoint()
     for j, n_ in enumerate(counts):
@@ -179,9 +187,20 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
     d.qpos[m.jnt_qposadr[m.joint("rev_motor_08_2").id]] = 0.0115 * q_init[7]
     d.ctrl[acts] = q_init
     mujoco.mj_forward(m, d)
+    if env_parts:                                     # completed one by one, the object sits a few mm into its support
+        for _ in range(4):
+            pen = min([d.contact[k].dist for k in range(d.ncon)
+                       if oid in (m.geom_bodyid[d.contact[k].geom1], m.geom_bodyid[d.contact[k].geom2])
+                       and 0 in (m.geom_bodyid[d.contact[k].geom1], m.geom_bodyid[d.contact[k].geom2])] or [0.0])
+            if pen > -0.0003:
+                break
+            d.qpos[m.jnt_qposadr[m.body_jntadr[oid]] + 2] += -pen + 0.0003
+            mujoco.mj_forward(m, d)
+    z_before = float(d.xpos[oid][2])
     for _ in range(int(0.3 / DT)):                     # settle: hull on the support, arm sagging into its servos
         mujoco.mj_step(m, d)
     z0 = float(d.xpos[oid][2])
+    settle_drop = (z_before - z0) * 1000
     frames, t, nxt = [], 0.0, 0.0
     seg_ends = np.cumsum([dur + 0.4 for _, _, dur, _ in segs])
     seg_log, si, touched, first, at_lift = [], 0, set(), None, None
@@ -252,7 +271,8 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
         done = "목표 자세로 들고 있음" if pl.get("hold") else "옮겨 놓음"
         verdict = verdict if not held else (done if place["ok"] else f"옮겼지만 {err:.0f} mm / {ang:.0f}° 어긋남")
     return {"frames": frames, "lift_mm": round(lift, 1), "planned_lift_mm": planned, "held": bool(held),
-            "verdict": verdict, "jaw_contacts": jaw_contacts, "place": place, "duration_s": round(total, 2), "segments": seg_log,
+            "verdict": verdict, "jaw_contacts": jaw_contacts, "place": place, "settle_drop_mm": round(settle_drop, 1),
+            "object_bottom_mm": round(float((np.vstack([p_.vertices for p_ in parts]) - c)[:, 2].min() + c[2]) * 1000, 1), "duration_s": round(total, 2), "segments": seg_log,
             "peak_jaw_force_n": round(peak_force, 1), "max_track_err_deg": round(float(np.degrees(track_err)), 2),
             "torque_frac": np.round(tf, 3).tolist(),
             "frame_cols": "t, 물체 xyz, 물체 quat(wxyz), 관절 q1..q8 (시뮬 실제값), 집게 접촉 수직력 N, 집게 토크 N·m",

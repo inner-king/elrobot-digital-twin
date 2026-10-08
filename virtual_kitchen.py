@@ -24,7 +24,8 @@ LAYOUT = [
     ("도마", OBJ("cutting_board"), False, 0.30, 0, 0.25, 0.00, "floor"),
     ("칼", YCB("032_knife"), True, None, 90, 0.205, 0.03, "도마"),
     ("당근", OBJ("carrot"), False, 0.16, 90, 0.29, 0.03, "도마"),
-    ("딸기", YCB("012_strawberry"), True, None, 0, 0.27, -0.10, "도마"),
+    ("딸기", YCB("012_strawberry"), True, None, 0, 0.245, -0.06, "도마"),   # on the board itself (at z −0.10 it hung
+                                                                          # over the 2 cm handle: fell when touched)
     ("머그", YCB("025_mug"), True, None, 200, 0.16, -0.21, "floor"),
     ("바나나", YCB("011_banana"), True, None, 30, 0.12, 0.29, "floor"),
     ("사과", YCB("013_apple"), True, None, 0, 0.31, 0.22, "floor"),

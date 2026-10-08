@@ -56,6 +56,7 @@ IK_POS_TOL, IK_ROT_TOL = 2e-3, 0.03
 # fingertips, which end 13 mm past the TCP — a 17–24 mm-high knife on a board had every candidate's tips in the board;
 # − = deeper in the jaws, more pad on the object)
 GRASP_DEPTH_M = (0.0, -0.010, 0.006, 0.010)
+WIDTH_MARGIN_M, WIDTH_PENALTY = 0.005, 2.0
 
 
 def _gt():
@@ -64,6 +65,17 @@ def _gt():
 
 
 _MODEL = None
+
+
+_HULLS = None
+
+
+def _hulls(gt):
+    """TACO's gripper_hulls, computed once (it re-read the STLs: 97 calls, 1.5 s in one plan)"""
+    global _HULLS
+    if _HULLS is None:
+        _HULLS = gt.gripper_hulls()
+    return _HULLS
 
 
 def _model():
@@ -144,15 +156,46 @@ def object_meshes(v_base, tris, obj_idx, support_z=None):
     return meshes
 
 
-# ---------------------------------------------------------------- [ours] IK wrapper around pick_demo.solve_ik
+# ---------------------------------------------------------------- [ours] IK: pick_demo.solve_ik's damped least squares,
+# made fast. Measured (strawberry pick-and-place plan): solve_ik took 21 of 32 s — 1 735 calls, each building a new
+# MjData, iterating to a 1e-5 residual (the plan accepts 2 mm / 0.03 rad) with three np.cross per iteration. Same
+# update rule here; one MjData kept; stop 10× inside the acceptance; one vectorised rotation error.
+IK_STOP_POS, IK_STOP_ROT, IK_ITERS, IK_DAMPING = 2e-4, 3e-3, 200, 1e-4
+_IK = {}
+
+
 def ik(target_pos, target_rot, q_seed, restarts=6):
-    from pick_demo import solve_ik   # unchanged implementation (damped least squares on the tcp site)
-    m, d = _model()
-    d.qpos[:] = 0
-    d.qpos[:7] = q_seed
-    q, pe, re = solve_ik(m, d, np.asarray(target_pos, float), np.asarray(target_rot, float), np.asarray(q_seed, float),
-                         iters=200, restarts=restarts)
-    return q, pe, re
+    import mujoco
+    m, _ = _model()
+    if not _IK:
+        _IK.update(d=mujoco.MjData(m), sid=m.site("tcp").id, lo=m.jnt_range[:7, 0].copy(), hi=m.jnt_range[:7, 1].copy(),
+                   jp=np.zeros((3, m.nv)), jr=np.zeros((3, m.nv)), I6=IK_DAMPING * np.eye(6))
+    d, sid, lo, hi, jp, jr, I6 = (_IK[k] for k in ("d", "sid", "lo", "hi", "jp", "jr", "I6"))
+    tp, tR = np.asarray(target_pos, float), np.asarray(target_rot, float)
+    rng = np.random.default_rng(0)
+    best = None
+    for attempt in range(restarts + 1):
+        q = np.asarray(q_seed, float).copy() if attempt == 0 else rng.uniform(lo, hi)
+        d.qpos[:] = 0
+        for _ in range(IK_ITERS):
+            d.qpos[:7] = q
+            mujoco.mj_kinematics(m, d)
+            mujoco.mj_comPos(m, d)
+            R = d.site_xmat[sid].reshape(3, 3)
+            ep = tp - d.site_xpos[sid]
+            er = 0.5 * np.cross(R.T, tR.T).sum(axis=0)       # Σ_i r_i × t_i
+            if ep @ ep < IK_STOP_POS ** 2 and er @ er < IK_STOP_ROT ** 2:
+                break
+            mujoco.mj_jacSite(m, d, jp, jr, sid)
+            J = np.vstack([jp[:, :7], jr[:, :7]])
+            e = np.r_[ep, er]
+            q = np.clip(q + J.T @ np.linalg.solve(J @ J.T + I6, e), lo, hi)
+        res = (q, float(np.sqrt(ep @ ep)), float(np.sqrt(er @ er)))
+        if best is None or res[1] + 0.1 * res[2] < best[1] + 0.1 * best[2]:
+            best = res
+        if best[1] < 1e-3 and best[2] < 0.01:
+            break
+    return best
 
 
 LINE_STEP_M, LINE_DEV_TOL_M, LINE_MAX_DQ = 0.005, 0.003, 0.8
@@ -246,7 +289,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
     obj = points_base[obj_idx]
     centre = obj.mean(axis=0)
     approach = -up                                     # [ours] top-down, the TACO slot for the human approach
-    hulls, _ = gt.gripper_hulls()
+    hulls, _ = _hulls(gt)
     rng = np.random.default_rng(rng_seed)
     out = {"object_points": int(len(obj)), "support_height": round(support, 4),
            "object_size_m": np.round(np.ptp(obj, axis=0), 3).tolist(), "tried": []}
@@ -278,7 +321,12 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
         if not cands:
             continue
         # [TACO] best_grasp ranking (distance to the reference centre − 0.02·quality), top 60, ROLLS each
-        ranked = sorted(cands, key=lambda c: np.linalg.norm(c["centre"] - ref) - 0.02 * c["quality"])[:60]
+        # + [ours] width margin: a width within WIDTH_MARGIN_M of what the jaws take (51 mm − 2 × 3 mm clearance) is
+        # pushed back by WIDTH_PENALTY per metre over (a 45 mm strawberry was grasped across its widest, 44 mm, and
+        # 1–2 mm of reconstruction spread flipped held ↔ not lifted; narrower grasps on it exist)
+        w_max = gt.GRIPPER_SPAN - 2 * gt.CLEARANCE_MM / 1000
+        ranked = sorted(cands, key=lambda c: np.linalg.norm(c["centre"] - ref) - 0.02 * c["quality"]
+                        + WIDTH_PENALTY * max(0.0, c["width"] - (w_max - WIDTH_MARGIN_M)))[:60]
         n_free = n_ik = 0
         why = {"집게 충돌": 0, "접근 충돌": 0, "파지 IK": 0, "접근 직선": 0, "들기 직선": 0}
         for c in ranked:
@@ -401,7 +449,7 @@ def plan_place(gplan, D, points_base, obj_idx, up):
     second, only for a round footprint (principal extents within 15 %), where that turn does not show.
     Returns the place dict (joint waypoints, errors) or {"error": …}."""
     gt = _gt()
-    hulls, _ = gt.gripper_hulls()
+    hulls, _ = _hulls(gt)
     up = up / np.linalg.norm(up)
     G = np.array(gplan["frame"], float)
     gear = float(gplan["gear"])

@@ -91,7 +91,7 @@ class GraspManager:
             import mujoco
             import planner
             import sim
-            planner._gt().gripper_hulls()
+            planner._hulls(planner._gt())
             planner._model()
             mujoco.MjSpec.from_string(sim.arm_xml()).compile()
         except Exception as e:
@@ -394,11 +394,65 @@ class GraspManager:
             t1 = time.time()
             sz = r.get("support_z")
             sz = float(pb[obj_idx][:, 2].min() - 0.008) if sz is None else sz
+            env, floor_z = self._sim_env(pb[obj_idx], r)
             r["sim"] = simulate(r, _drop_outliers(pb[obj_idx]), sz, q0, self._torque_frac(),
-                                obj_mesh=self._seg[3] if self._seg is not None and len(self._seg) > 3 else None)
+                                obj_mesh=self._seg[3] if self._seg is not None and len(self._seg) > 3 else None,
+                                env_parts=env, floor_z=floor_z)
+            r["sim"]["env_objects"] = len({k for k, _ in self._env_used})
+            r["sim"]["env_info"] = self._env_info
             r["sim"]["ms"] = round((time.time() - t1) * 1000)
         except Exception as e:
             r["sim"] = {"error": str(e), "lift_mm": -1e9}
+
+    ENV_RADIUS_M = 0.25
+
+    def _sim_env(self, obj_base, r):
+        """[ours] the other reconstructed objects within ENV_RADIUS_M of the object or its place target, as convex
+        pieces in the base frame (decomposed once per object and mesh), and the floor height (base z)."""
+        from sim import decompose
+        self._env_used, self._env_info = [], []
+        rc = getattr(self.cam, "recon", None) if self.cam else None
+        if rc is None or self._sel is None or rc.floor_y is None:
+            return None, None
+        T_bw = self._sel[4]
+        floor_z = float((T_bw[:3, :3] @ np.array([0, rc.floor_y, 0]) + T_bw[:3, 3])[2])
+        c = obj_base.mean(axis=0)
+        pts = [c]
+        pl = r.get("place")
+        if pl and "D" in pl:
+            D = np.array(pl["D"])
+            pts.append(D[:3, :3] @ c + D[:3, 3])
+        cache = getattr(self, "_env_cache", {})
+        out = []
+        for o in rc.status.get("objects") or []:
+            if o["id"] == self._sel_oid:
+                continue
+            geo = rc.object_geometry(o["id"])
+            if geo is None:
+                continue
+            Vw, Tw = np.asarray(geo[0], float), np.asarray(geo[1])
+            key = (o["id"], len(Vw), round(float(Vw.sum()), 3))
+            if key not in cache:
+                try:
+                    cache[key] = decompose(Vw, Tw)[0]          # world frame
+                except Exception:
+                    continue
+            Mv = self._vmoved.get(o["id"], np.eye(4))
+            M = T_bw @ Mv
+            cb = M[:3, :3] @ Vw.mean(axis=0) + M[:3, 3]
+            if min(np.linalg.norm((cb - q_)[:2]) for q_ in pts) > self.ENV_RADIUS_M:
+                continue
+            tops = []
+            for h in cache[key]:
+                hh = h.copy()
+                hh.apply_transform(M)
+                out.append(hh)
+                tops.append(hh.vertices[:, 2].max())
+                self._env_used.append((o["id"], len(out)))
+            self._env_info.append({"id": o["id"], "top_mm": round(float(max(tops)) * 1000, 1), "pieces": len(tops),
+                                   "dist_mm": round(float(min(np.linalg.norm((cb - q_)[:2]) for q_ in pts)) * 1000)})
+        self._env_cache = cache
+        return (out or None), floor_z
 
     APPROX_GRASPS, APPROX_STEPS = 6, 7
 
