@@ -37,6 +37,9 @@ def _urdf_limits(urdf):
     return lim
 
 
+SHOULDER_BASE = np.array([-0.02, 0.042, 0.091])   # joint 2 in the base frame: TCP reach ≤ 43.4 cm from it (sampled)
+
+
 def _yaw_only(m16):
     """[ours] registration (row-major 4×4, scene y up) with its tilt removed: only the turn about the vertical stays,
     the position is kept. A tilted robot / world (left by a free-rotation gizmo) sat askew in the scene."""
@@ -300,7 +303,7 @@ class GraspManager:
         self.state.update(stage="planning", error=None)
         q0 = self.q_now()
         t0 = time.time()
-        best, tried, place_fail = None, [], []
+        best, tried, place_fail, failed = None, [], [], []
         for r in plans(pb, tris, click, up, q0, seg=self._seg):
             obj_idx = r.pop("obj_idx", None)
             if "error" in r:
@@ -313,18 +316,11 @@ class GraspManager:
                 r["place"] = plan_place(r, D, pb, obj_idx, up)
                 if "error" in r["place"]:
                     place_fail.append(r["place"]["tried"][-1:] if r["place"]["tried"] else [])
+                    failed.append((r, obj_idx))
                     if len(place_fail) >= 12:
                         break
                     continue
-            try:
-                t1 = time.time()
-                sz = r.get("support_z")
-                sz = float(pb[obj_idx][:, 2].min() - 0.008) if sz is None else sz
-                r["sim"] = simulate(r, _drop_outliers(pb[obj_idx]), sz, q0, self._torque_frac(),
-                                    obj_mesh=self._seg[3] if self._seg is not None and len(self._seg) > 3 else None)
-                r["sim"]["ms"] = round((time.time() - t1) * 1000)
-            except Exception as e:
-                r["sim"] = {"error": str(e), "lift_mm": -1e9}
+            self._simulate(r, obj_idx, pb, q0)
             tried.append({"width_mm": r["width_mm"], "roll_deg": r["roll_deg"], "verdict": r["sim"].get("verdict", "오류"),
                           "lift_mm": r["sim"].get("lift_mm")})
             good = r["sim"].get("held") and (D is None or (r["sim"].get("place") or {}).get("ok"))
@@ -334,6 +330,17 @@ class GraspManager:
                 if good:
                     best = r
                 break
+        if best is None and D is not None and failed:
+            # [ours] the target is out of reach (or blocked): the closest pose that works instead — the move cut back
+            # along the way from where the object is to the target (centre on the straight line, turn slerped),
+            # largest fraction that still plans, per grasp; the best grasp's goes to the prediction
+            best = self._closest_place(failed, D, pb, up, q0)
+            if best is not None:
+                r, obj_idx = best
+                self._simulate(r, obj_idx, pb, q0)
+                tried.append({"width_mm": r["width_mm"], "roll_deg": r["roll_deg"], "verdict": r["sim"].get("verdict", "오류"),
+                              "lift_mm": r["sim"].get("lift_mm")})
+                best = r
         if best is None:                              # grasps exist, but none can place the object there
             from collections import Counter
             why = Counter()
@@ -349,6 +356,75 @@ class GraspManager:
         best["sim_tried"] = tried
         best["total_ms"] = round((time.time() - t0) * 1000)
         self.state.update(stage="planned", plan=best)
+
+    def _simulate(self, r, obj_idx, pb, q0):
+        from planner import _drop_outliers
+        from sim import simulate
+        try:
+            t1 = time.time()
+            sz = r.get("support_z")
+            sz = float(pb[obj_idx][:, 2].min() - 0.008) if sz is None else sz
+            r["sim"] = simulate(r, _drop_outliers(pb[obj_idx]), sz, q0, self._torque_frac(),
+                                obj_mesh=self._seg[3] if self._seg is not None and len(self._seg) > 3 else None)
+            r["sim"]["ms"] = round((time.time() - t1) * 1000)
+        except Exception as e:
+            r["sim"] = {"error": str(e), "lift_mm": -1e9}
+
+    APPROX_GRASPS, APPROX_STEPS = 6, 7
+
+    def _closest_place(self, failed, D, pb, up, q0):
+        """Largest fraction a ∈ (0, 1) of the requested move that plans (bisection, APPROX_STEPS), over the first
+        APPROX_GRASPS feasible grasps. → (plan with place + place["approx"], obj_idx) or None."""
+        from planner import plan_place
+        from scipy.spatial.transform import Rotation, Slerp
+        best = None
+        for r, obj_idx in failed[:self.APPROX_GRASPS]:
+            c = pb[obj_idx].mean(axis=0)
+            c_t = D[:3, :3] @ c + D[:3, 3]
+            sl = Slerp([0, 1], Rotation.from_matrix([np.eye(3), D[:3, :3]]))
+
+            def D_at(a):
+                Ra = sl([a]).as_matrix()[0]
+                M = np.eye(4)
+                M[:3, :3] = Ra
+                M[:3, 3] = c + a * (c_t - c) - Ra @ c
+                return M
+            def search(make):
+                lo, hi, got = 0.0, 1.0, None
+                for _ in range(self.APPROX_STEPS):
+                    a = (lo + hi) / 2
+                    Da = make(a)
+                    pl = plan_place(r, Da, pb, obj_idx, up)
+                    if "error" in pl:
+                        hi = a
+                    else:
+                        lo, got = a, (a, pl, Da)
+                return got
+            # (1) part of the way along the move; (2) the target pulled toward the shoulder (the arm's reach is a ball
+            # about joint 2): for a target beyond the robot, (2) gets much closer than (1)
+            sh = SHOULDER_BASE
+            far = c_t - sh
+
+            def D_pull(a):                   # centre on the shoulder→target line, 50 … 100 % of the way; turn as asked
+                M = D.copy()
+                M[:3, 3] = sh + far * (0.5 + 0.5 * a) - D[:3, :3] @ c
+                return M
+            for got in (search(D_at), search(D_pull)):
+                if not got:
+                    continue
+                Da = got[2]
+                miss = float(np.linalg.norm(c_t - (Da[:3, :3] @ c + Da[:3, 3])))
+                if best is None or miss < best[0]:
+                    best = (miss, got, r, obj_idx)
+            if best and best[0] < 0.01:
+                break
+        if best is None:
+            return None
+        miss, (a, pl, _), r, obj_idx = best
+        pl["approx"] = {"fraction": round(a, 3), "miss_mm": round(miss * 1000), "requested_D": np.round(D, 5).tolist()}
+        r = dict(r)
+        r["place"] = pl
+        return r, obj_idx
 
     def _torque_frac(self):
         """Fraction of stall torque each real servo may use: RAM torque_limit capped by the console (server.TORQUE_CAP)."""

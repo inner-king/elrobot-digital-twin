@@ -1637,6 +1637,8 @@ let placeStage = null;
 function watchPlace(g){                     // target done (or failed): the ghost goes, the tracked object is the truth
   if(!placeTgt.sent) { placeStage = g.stage; return; }
   if(g.stage !== placeStage){
+    const ap = g.plan?.place?.approx;
+    if(ap && g.stage === 'executing') toast(`목표까지 팔이 닿지 않아, 가장 가까운 곳(가는 길의 ${Math.round(ap.fraction * 100)}% · ${(ap.miss_mm / 10).toFixed(1)} cm 모자람)에 놓습니다`);
     if(g.stage === 'done'){ setTimeout(() => { clearPlaceTarget(); if(gizmoKind === 'object') setGizmo('none'); }, 1500); }
     else if((g.stage === 'selected' || g.stage === 'planned' || g.stage === 'idle') && g.error){ toast(g.error); placeTgt.sent = false; renderPlacebar(); }
     placeStage = g.stage;

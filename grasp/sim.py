@@ -248,7 +248,7 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
         if pl.get("flip_deg"):                          # round object placed with the 180°-turned grasp
             ang = abs(ang - 180.0)
         place = {"err_mm": round(err, 1), "err_deg": round(ang, 1), "dz_mm": round(float(d.xpos[oid][2] - want[2]) * 1000, 1),
-                 "ok": bool(held and err < 15 and ang < 15)}
+                 "ok": bool(held and err < (25 if pl.get("hold") else 15) and ang < 15)}   # held: includes the sag in the jaws
         done = "목표 자세로 들고 있음" if pl.get("hold") else "옮겨 놓음"
         verdict = verdict if not held else (done if place["ok"] else f"옮겼지만 {err:.0f} mm / {ang:.0f}° 어긋남")
     return {"frames": frames, "lift_mm": round(lift, 1), "planned_lift_mm": planned, "held": bool(held),
