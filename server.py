@@ -17,17 +17,36 @@ from pathlib import Path
 
 import serial
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 HERE = Path(__file__).parent
 ROBOT_DIR = HERE.parent / "norma-core" / "hardware" / "elrobot" / "simulation"
 CALIB_DIR = HERE / "calibrations"
 ACTIVE_FILE = CALIB_DIR / ".active"
-PORT = os.environ.get("ARM_PORT") or next(iter(sorted(glob.glob("/dev/cu.usbmodem*"))), None)
+PORT_PATTERNS = ("/dev/cu.usbmodem*", "/dev/cu.usbserial*", "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*")
+ROBOT_FILE = HERE / "robot.json"   # {"source": "auto" | "/dev/cu..." | "virtual"}
+
+
+def list_ports():
+    return sorted({p for pat in PORT_PATTERNS for p in glob.glob(pat)})
+
+
+def find_port():
+    """Re-scanned on every (re)connect attempt, so plugging the board in later just works."""
+    return os.environ.get("ARM_PORT") or next(iter(list_ports()), None)
+
+
+class _Reconnect(BaseException):
+    """Raised inside the bus loop to switch the robot source (BaseException: skips the per-command error handler)."""
+
+
+PORT = find_port()
 BAUD = 1_000_000
 MOTOR_IDS = list(range(1, 9))
 HTTP_PORT = int(os.environ.get("ARM_HTTP_PORT", "8765"))
+# 0.0.0.0 = reachable from other devices on the LAN (no auth: anyone on the network can drive the arm)
+HTTP_HOST = os.environ.get("ARM_HTTP_HOST", "0.0.0.0")
 
 # Per-motor safety caps on Torque_Limit (0..1000 = 0..100%). Motor 8 is a 7.4V servo on a 12V bus.
 TORQUE_CAP = {i: 600 for i in MOTOR_IDS} | {8: 250}
@@ -160,13 +179,27 @@ class Arm:
         self.calib = load_calib(active_name())
         self.new_name = None
         self.settings = json.loads(json.dumps(DEFAULT_SETTINGS))
-        self.state = {"port": PORT, "connected": False, "error": None, "motors": {},
+        try:
+            self.source = json.loads(ROBOT_FILE.read_text()).get("source", "auto")
+        except Exception:
+            self.source = "auto"
+        self.state = {"port": PORT, "connected": False, "error": None, "motors": {}, "robot_source": self.source,
+                      "ports": list_ports(), "clients": 0,
                       "eeprom": {}, "ram": {}, "calibrating": False, "rec": {},
                       "calib": self.calib, "calib_files": list_calibs(), "calib_raw": "", "settings": self.settings, "log": [],
                       "torque_cap": TORQUE_CAP}
         self.bus = None
         self.rec = {}
         self.publish_calib()  # calibration recording: id -> {last, acc, lo, hi}
+
+    def set_source(self, src):
+        """Called straight from the socket handler: works while disconnected (the command queue only runs connected)."""
+        if src not in ("auto", "virtual") and src not in list_ports():
+            raise RuntimeError(f"포트 {src}가 없습니다")
+        self.source = src
+        self.state["robot_source"] = src
+        ROBOT_FILE.write_text(json.dumps({"source": src}))
+        self._switch = True
 
     def log(self, msg):
         with self.lock:
@@ -310,7 +343,7 @@ class Arm:
                      f"검증 pos {got} (예상 {exp})")
         name = self.new_name or time.strftime("calib_%Y%m%d_%H%M%S")
         self.calib = {"name": name, "robot": "elrobot_follower", "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-                      "port": PORT, "format": "raw arc in offset frame; angle = lower + p*(upper-lower)",
+                      "port": self.state.get("port"), "format": "raw arc in offset frame; angle = lower + p*(upper-lower)",
                       "motors": motors}
         save_calib(self.calib)
         self.publish_calib()
@@ -354,6 +387,9 @@ class Arm:
                 self.cmd_torque(mid, bool(c["on"]))
         elif t == "goal":
             self.cmd_goal(int(c["id"]), int(c["raw"]))
+        elif t == "goal_many":                       # grasp executor: one interpolation step for all joints
+            for mid, raw in c["raws"].items():
+                self.cmd_goal(int(mid), int(raw))
         elif t == "settings":
             for k in ("speed", "accel", "torque_limit"):
                 if k in c:
@@ -400,13 +436,24 @@ class Arm:
         elif t == "refresh":
             self.refresh_eeprom()
 
+
     def run(self):
         while True:
             try:
+                self.state["ports"] = list_ports()
                 if self.bus is None:
-                    if not PORT:
-                        raise RuntimeError("시리얼 포트를 찾지 못했습니다 (ARM_PORT 지정)")
-                    self.bus = Bus(PORT)
+                    self.state["motors"] = {}
+                    if self.source == "virtual":
+                        from virtual import VirtualBus
+                        port = "가상 로봇"
+                        self.bus = VirtualBus(self.calib)
+                    else:
+                        port = find_port() if self.source == "auto" else self.source
+                        if not port or port not in list_ports():
+                            self.state["port"] = None
+                            raise RuntimeError("로봇 USB 장치 없음 — 드라이버 보드 USB 연결 확인 (또는 가상 로봇 선택)")
+                        self.bus = Bus(port)
+                    self.state["port"] = port
                     self.refresh_eeprom()
                     for mid in MOTOR_IDS:
                         r = self.read_ram(mid)
@@ -414,9 +461,12 @@ class Arm:
                             self.state["ram"][mid] = r
                     self.state["connected"] = True
                     self.state["error"] = None
-                    self.log(f"연결됨 {PORT}")
+                    self.log(f"연결됨 {port}")
                 tick = 0
+                self._switch = False
                 while True:
+                    if self._switch:
+                        raise _Reconnect()
                     while not self.cmds.empty():
                         c = self.cmds.get_nowait()
                         try:
@@ -436,6 +486,8 @@ class Arm:
                         self.state["motors"][mid] = live
                         if self.state["calibrating"]:
                             self.calib_track(mid, live["pos"])
+                    if tick % 200 == 0:
+                        self.state["ports"] = list_ports()
                     if tick % 10 == 0:
                         for mid in MOTOR_IDS:
                             r = self.read_ram(mid)
@@ -447,9 +499,23 @@ class Arm:
                     self.state["connected"] = missing < len(MOTOR_IDS)
                     tick += 1
                     time.sleep(0.005)
+            except _Reconnect:
+                self.state.update(connected=False, error=None)
+                self.log(f"로봇 연결 전환: {self.source}")
+                try:
+                    self.bus and self.bus.ser.close()
+                except Exception:
+                    pass
+                self.bus = None
+                continue
             except Exception as e:
                 self.state["connected"] = False
                 self.state["error"] = str(e)
+                if getattr(self, "_switch", False):          # source changed while disconnected: retry now
+                    self._switch = False
+                    self.log(f"로봇 연결 전환: {self.source}")
+                    self.bus = None
+                    continue
                 try:
                     self.bus and self.bus.ser.close()
                 except Exception:
@@ -471,6 +537,15 @@ except Exception as e:  # camera deps missing: the arm console still works
     cam = None
     arm.state["camera"] = {"connected": False, "error": f"camera disabled: {e}"}
 
+try:
+    _sys.path.insert(0, str(HERE / "grasp"))
+    from manager import GraspManager
+    grasp = GraspManager(arm, cam, ROBOT_DIR / "elrobot_follower.urdf")
+    arm.state["grasp"] = grasp.state
+except Exception as e:
+    grasp = None
+    arm.state["grasp"] = {"stage": "disabled", "error": f"grasp disabled: {e}"}
+
 app = FastAPI()
 app.mount("/robot", StaticFiles(directory=ROBOT_DIR), name="robot")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -484,11 +559,53 @@ def index():
 @app.websocket("/ws")
 async def ws(sock: WebSocket):
     await sock.accept()
+    arm.state["clients"] += 1
 
     async def reader():
         while True:
-            msg = await sock.receive_text()
-            arm.cmds.put(json.loads(msg))
+            c = json.loads(await sock.receive_text())
+            if c.get("type") == "robot_source":
+                try:
+                    arm.set_source(c.get("source", "auto"))
+                except Exception as e:
+                    arm.log(f"명령 실패 robot_source: {e}")
+                continue
+            if c.get("type") == "estop" and grasp is not None:
+                grasp.abort()                         # stop a running grasp before the torque goes off
+            if c.get("type", "").startswith(("reg_", "grasp_")):
+                try:
+                    if grasp is None:
+                        raise RuntimeError(arm.state["grasp"].get("error", "파지 모듈 없음"))
+                    await asyncio.to_thread(grasp.handle, c)   # planning takes ~0.1–2 s; keep the socket responsive
+                    if c["type"] != "reg_set":
+                        arm.log({"grasp_select": "물체 선택", "grasp_plan": "파지 계획", "grasp_exec": "파지 실행 시작",
+                                 "grasp_go": "집기: 계획 후 실행 시작",
+                                 "grasp_cancel": "파지 취소"}[c["type"]] + (f": {grasp.state['error']}" if grasp.state.get("error") else ""))
+                except Exception as e:
+                    arm.log(f"명령 실패 {c['type']}: {e}")
+                continue
+            if c.get("type", "").startswith(("floor_", "recon_", "cam_", "detect_")):
+                try:
+                    if cam is None:
+                        raise RuntimeError("카메라 모듈이 꺼져 있음")
+                    cam.handle(c)
+                    if c["type"] == "cam_virtual_toggle":
+                        arm.log(f"가상 물체 {c['index'] + 1} {'치움' if c['index'] in cam.status['virtual_hidden'] else '다시 놓음'}")
+                    elif c["type"] == "cam_config":
+                        arm.log(f"카메라 연결 방식: {cam.status['link']}" + (f" {cam.status.get('host')}" if cam.status["link"] == "wifi" else ""))
+                    elif c["type"].startswith("recon_"):
+                        arm.log({"recon_start": "복원 시작", "recon_stop": "복원 정지", "recon_reset": "복원 초기화"}[c["type"]])
+                    elif c["type"].startswith("detect_"):
+                        arm.log({"detect_start": "물체 인식 시작", "detect_stop": "물체 인식 정지", "detect_reset": "인식 기록 초기화",
+                                 "detect_vocab": "인식 어휘 변경"}.get(c["type"], c["type"]))
+                    elif c["type"].startswith("cam_"):
+                        arm.log(c["type"])
+                    else:
+                        arm.log(f"바닥 {'고정' if c['type'] == 'floor_lock' else '해제'}: {(cam.status.get('floor') or {}).get('spread_mm', '-')} mm 편차")
+                except Exception as e:
+                    arm.log(f"명령 실패 {c['type']}: {e}")
+            else:
+                arm.cmds.put(c)
 
     task = asyncio.create_task(reader())
     try:
@@ -503,7 +620,59 @@ async def ws(sock: WebSocket):
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
+        arm.state["clients"] -= 1
         task.cancel()
+
+
+@app.get("/grasp_object")
+def grasp_object():
+    """u32 N | f32[N*3] selected object points (ARKit world, m)"""
+    return Response(content=grasp.object_bytes() if grasp else b"", media_type="application/octet-stream")
+
+
+@app.get("/grasp_object_mesh")
+def grasp_object_mesh():
+    """per-object TSDF of the selection, same layout as /recon_mesh (ARKit world, m)"""
+    return Response(content=grasp.object_mesh_bytes() if grasp else b"", media_type="application/octet-stream")
+
+
+@app.get("/recon_objects")
+def recon_objects():
+    """u32 count | per object: u32 id | raw TSDF mesh | completed mesh (each: u32 nv, nt | f32 v | f32 n | u32 tris | u8 rgb)"""
+    return Response(content=cam.recon.objects_bytes() if cam else b"", media_type="application/octet-stream")
+
+
+@app.get("/detect_tracks")
+def detect_tracks():
+    """mask-only objects: u32 count | per track: u32 id | u32 n | f32 n×3 (ARKit world)"""
+    fn = getattr(cam.detect, "track_bytes", None) if cam else None
+    return Response(content=fn() if fn else b"", media_type="application/octet-stream")
+
+
+@app.get("/recon_floor.png")
+def recon_floor_png():
+    """floor orthophoto (rows = +z, columns = +x of the ARKit world); bounds in /recon_floor.json"""
+    f = cam.recon.floor_png() if cam else None
+    return Response(content=f[1] if f else b"", media_type="image/png")
+
+
+@app.get("/recon_floor.json")
+def recon_floor_json():
+    f = cam.recon.floor_png() if cam else None
+    return f[0] if f else {}
+
+
+@app.get("/recon_fill")
+def recon_fill():
+    """inferred floor (holes + under objects), /recon_mesh layout"""
+    return Response(content=cam.recon.fill_bytes() if cam else b"", media_type="application/octet-stream")
+
+
+@app.get("/recon_mesh")
+def recon_mesh():
+    """u32 nv | u32 nt | f32[nv*3] xyz | f32[nv*3] normals | u32[nt*3] tris | u8[nv*3] rgb  (ARKit world, m)"""
+    blob = cam.recon.mesh_bytes() if cam is not None else None
+    return Response(content=blob or b"", media_type="application/octet-stream")
 
 
 @app.websocket("/ws_cam")
@@ -525,4 +694,4 @@ async def ws_cam(sock: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=HTTP_PORT, log_level="warning")
+    uvicorn.run(app, host=HTTP_HOST, port=HTTP_PORT, log_level="warning")

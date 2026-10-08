@@ -6,6 +6,7 @@
 <title>ElRobot Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,300..600,0..1,0&display=block" rel="stylesheet">
 <style>
 :root{
   --bg:#ffffff; --bg2:#f6f7f9; --bg3:#eef0f3; --line:#e4e7ec; --line2:#d3d8df;
@@ -14,8 +15,17 @@
   --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'IBM Plex Sans KR',system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+.ic{font-family:'Material Symbols Rounded';font-weight:normal;font-style:normal;font-size:18px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 20;vertical-align:middle;user-select:none;flex:none}
+.ic.f{font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 20}
 html,body{height:100%;background:var(--bg);color:var(--ink);font:13px/1.45 var(--sans);overflow:hidden}
-button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:6px 12px;cursor:pointer}
+button{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px}
+button.small .ic{font-size:16px}
+button.icon{padding:0;width:32px;height:32px}
+button.icon.small{width:26px;height:26px}
+.chip{display:inline-flex;align-items:center;gap:5px;font:12px var(--mono);color:var(--ink2);padding:4px 9px;border-radius:999px;background:var(--bg2)}
+.chip .ic{font-size:16px;color:var(--ink3)}
+.lbl{display:inline-flex;align-items:center;gap:6px}
+.lbl .ic{font-size:17px;color:var(--ink3)}
 button:hover{background:var(--bg2)}
 button:disabled{opacity:.4;cursor:not-allowed}
 button.primary{background:var(--ink);border-color:var(--ink);color:#fff}
@@ -28,7 +38,7 @@ input[type=number]{width:80px}
 
 .app{display:grid;grid-template-rows:50px 1fr var(--bottom-h,220px);grid-template-columns:280px 1fr 380px;height:100vh}
 header{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line)}
-.brand{font:600 14px var(--sans)}
+.brand{font:600 14px var(--sans);display:flex;align-items:center;gap:6px}
 .status{display:flex;align-items:center;gap:7px;font:12px var(--mono);color:var(--ink2)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);flex:none}
 .dot.on{background:var(--ok)} .dot.off{background:var(--bad)} .dot.warn{background:var(--accent)}
@@ -37,10 +47,13 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:0 16px;
 .estop:hover{background:#c92a2a}
 
 aside{overflow:auto;background:var(--bg)}
-#left{border-right:1px solid var(--line)}
+#left{border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.lpane{display:none;overflow:auto;flex:1;min-height:0}
+.lpane.on{display:block}
 #right{border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
 .list-h{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
-.list-h h3{font:600 12px var(--sans);color:var(--ink2)}
+.list-h h3{font:600 12px var(--sans);color:var(--ink2);display:flex;align-items:center;gap:6px}
+.list-h h3 .ic{font-size:17px;color:var(--ink3)}
 
 .motor{padding:10px 16px;cursor:pointer;border-left:3px solid transparent}
 .motor:hover{background:var(--bg2)}
@@ -69,11 +82,24 @@ aside{overflow:auto;background:var(--bg)}
 .slider-wrap input:disabled::-webkit-slider-thumb{background:var(--ink3);box-shadow:0 0 0 1px var(--ink3)}
 .live-mark{position:absolute;top:3px;width:2px;height:12px;background:var(--info);z-index:1;pointer-events:none}
 
-main{position:relative;background:linear-gradient(180deg,#fbfbfc 0%,#eef0f3 100%)}
+main{position:relative;background:#cfd8e2;overflow:hidden}
 #view{position:absolute;inset:0}
 .vbtns{position:absolute;right:12px;top:12px}
 .vbtns button{font-size:12px;padding:4px 10px;background:rgba(255,255,255,.85)}
-.hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--ink3);pointer-events:none}
+.hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--ink3);pointer-events:none;display:flex;gap:12px}
+.hint span{display:inline-flex;align-items:center;gap:3px}.hint .ic{font-size:15px}
+.simhud{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);display:none;gap:6px;align-items:center;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:999px;padding:5px 8px;box-shadow:0 4px 14px rgba(20,24,30,.08)}
+.simhud.show{display:flex}
+.gzbar{position:absolute;left:12px;top:12px;display:none;gap:4px;align-items:center;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:4px 6px;box-shadow:0 4px 14px rgba(20,24,30,.08);font:12px var(--sans)}
+.gzbar.show{display:flex}
+.gzbar .k{font:600 12px var(--sans);padding:2px 6px;color:var(--ink2)}
+.gzbar button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.placebar{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);display:none;white-space:nowrap;gap:6px;align-items:center;background:rgba(255,255,255,.95);border:1px solid #1c7ed6;border-radius:999px;padding:5px 8px 5px 12px;box-shadow:0 4px 14px rgba(28,126,214,.15);font:12px var(--sans)}
+.placebar.show{display:flex}
+.placebar button,.gzbar button{white-space:nowrap;flex:none}
+.placebar .d{font:600 12px var(--mono, monospace);color:#1c7ed6;white-space:nowrap}
+.simhud .chip{background:none;padding:2px 6px;white-space:nowrap}
+.simhud .vd{font:600 12px var(--sans);padding:3px 9px;border-radius:999px;color:#fff;white-space:nowrap}
 
 .dock{display:flex;flex-direction:column;min-height:0;min-width:0}
 .dock-body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
@@ -90,13 +116,20 @@ footer.dock .menu{top:auto;bottom:calc(100% + 4px)}
 .menu label:hover{background:var(--bg2)}
 .menu label .where{margin-left:auto;font-size:11px;color:var(--ink3)}
 .menu .mh{font-size:11px;color:var(--ink3);padding:4px 8px 6px}
-.tab{border:none;border-radius:0;background:none;padding:13px 10px 11px;color:var(--ink3);font-weight:500;border-bottom:2px solid transparent}
+.tab{border:none;border-radius:0;background:none;padding:12px 7px 10px;color:var(--ink3);font-weight:500;border-bottom:2px solid transparent;gap:5px;white-space:nowrap;flex:none}
+.tab .ic{font-size:18px}
+
 .tab:hover{background:none;color:var(--ink2)}
 .tab.on{color:var(--ink);border-bottom-color:var(--ink)}
 .pane{display:none;overflow:auto;flex:1;min-height:0;padding:18px 18px 28px}
 footer .pane{padding:12px 18px 14px}
 .pane.on{display:block}
-.pane h4{font:600 12px var(--sans);color:var(--ink2);margin:22px 0 8px}
+.pane h4{font:600 12px var(--sans);color:var(--ink2);margin:22px 0 8px;display:flex;align-items:center;gap:6px}
+.pane h4 .ic{font-size:17px;color:var(--ink3)}
+.isteps{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px}
+.isteps span{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:var(--bg2);border-radius:999px;padding:3px 9px}
+.isteps .ic{font-size:16px;color:var(--accent)}
+.btns{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
 .pane h4:first-child{margin-top:0}
 
 .hero{display:flex;align-items:baseline;justify-content:space-between}
@@ -114,9 +147,9 @@ canvas.spark{display:block;width:100%;height:64px;margin-top:10px}
 .note.bad{background:#fff0f0;color:var(--bad)}
 details{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
 summary{cursor:pointer;font-weight:600;font-size:12px;color:var(--ink2)}
-.kv{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font:12px var(--mono);margin-top:8px}
-.kv .k{color:var(--ink3)}
-.kv .v{text-align:right}
+.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 12px;font:12px var(--mono);margin-top:8px}
+.kv .k{color:var(--ink3);white-space:nowrap}
+.kv .v{text-align:right;overflow-wrap:anywhere}
 .kv .grp{grid-column:1/-1;font:600 11px var(--sans);color:var(--ink2);margin-top:10px}
 
 .card{border:1px solid var(--line);border-radius:9px;padding:12px 14px}
@@ -154,45 +187,128 @@ footer{grid-column:1/-1;border-top:1px solid var(--line)}
 input[type=range].plain{-webkit-appearance:none;appearance:none;background:transparent;height:18px}
 input[type=range].plain::-webkit-slider-runnable-track{height:3px;background:var(--line2);border-radius:2px}
 input[type=range].plain::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ink);margin-top:-5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--ink)}
+.modal{position:fixed;inset:0;background:rgba(20,24,30,.35);display:none;align-items:center;justify-content:center;z-index:50}
+.modal.show{display:flex}
+.modal .box{width:min(1060px,96vw);height:min(88vh,920px);background:var(--bg);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+.modal .head{display:flex;align-items:center;border-bottom:1px solid var(--line);padding:0 8px 0 16px}
+.modal .head .ttl{font-weight:600;margin-right:16px;display:flex;align-items:center;gap:6px}
+.modal .body{flex:1;overflow:auto;padding:14px 18px 24px}
+.pg-legend{display:flex;gap:6px;margin-bottom:8px}
+.pg{position:relative;margin:0 auto}
+.pg-edges{position:absolute;left:0;top:0;overflow:visible}
+.pg-edges path{fill:none;stroke:var(--line2);stroke-width:1.6}
+.pg-edges path.on{stroke:#adb5bd;stroke-dasharray:6 5;animation:flow 1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-11}}
+.pg-edges text{font:10px var(--mono);fill:var(--ink3);paint-order:stroke;stroke:var(--bg);stroke-width:4px;text-anchor:middle}
+.pn{position:absolute;border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:10px;background:var(--bg);padding:8px 9px;cursor:pointer;transition:box-shadow .15s}
+.pn:hover{box-shadow:0 4px 14px rgba(20,24,30,.10)}
+.pn.sel{box-shadow:0 0 0 2px var(--ink)}
+.pn.t-taco{border-left-color:#1c7ed6}.pn.t-ours{border-left-color:var(--accent)}.pn.t-ext{border-left-color:#2f9e44}
+.pn-h{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12px}
+.pn-h .ic{font-size:20px;color:var(--ink2)}
+.pn.on .pn-h .ic{color:var(--ink)}
+.pn-live{font:11px/1.35 var(--mono);color:var(--ink2);margin-top:5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pn-live .off{color:var(--ink3)}
+.pn .st{position:absolute;right:8px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--line2)}
+.pn.on .st{background:var(--ok)}
+.pg-detail{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-height:84px}
+.pg-detail .h{display:flex;align-items:center;gap:7px;font-weight:600}
+.pg-detail .row{display:flex;gap:8px;margin-top:8px;font:12px/1.5 var(--mono);color:var(--ink2)}
+.pg-detail .row .ic{font-size:17px;color:var(--ink3)}
+.tag{display:inline-flex;align-items:center;gap:3px;font:600 10px var(--sans);padding:2px 7px;border-radius:5px}
+.tag.taco{background:#e7f5ff;color:#1c7ed6}.tag.ours{background:var(--accent-soft);color:#a33f08}.tag.ext{background:#ebfbee;color:#2b8a3e}
+.ctxmenu{position:fixed;z-index:40;background:var(--bg);border:1px solid var(--line2);border-radius:8px;box-shadow:0 8px 24px rgba(20,24,30,.14);padding:4px;display:none;min-width:140px}
+.ctxmenu button{display:flex;justify-content:flex-start;width:100%;text-align:left;border:none;border-radius:6px;padding:7px 10px;background:none}
+.ctxmenu button:hover{background:var(--bg2)}
+main canvas.hover{cursor:pointer}
+.vgizmo{position:absolute;right:10px;top:48px;width:92px;height:92px}
+.vgizmo circle{cursor:pointer}
+.vgizmo text{font:600 10px var(--sans);fill:#fff;pointer-events:none;text-anchor:middle;dominant-baseline:central}
+.objs .it{display:flex;align-items:center;gap:8px;padding:9px 16px;cursor:pointer;border-left:3px solid transparent}
+.objs .it:hover,.objs .it.hov{background:var(--bg2)}
+.objs .it.sel{background:var(--bg2);border-left-color:var(--accent)}
+.objs .it .ic{font-size:19px;color:var(--ink2)}
+.objs .it .sw{width:12px;height:12px;border-radius:3px;flex:none}
+.objs .it .nm{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.objs .it .meta{font:11px var(--mono);color:var(--ink3)}
+.objs .it .st{font:600 11px var(--sans);color:var(--accent)}
+.objs .it button{padding:3px 8px}
+.objs .gh{font:600 11px var(--sans);color:var(--ink3);padding:12px 16px 4px}
+.olabels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.olabel{position:absolute;transform:translate(-50%,-100%);background:rgba(27,31,36,.82);color:#fff;font:600 11px var(--sans);padding:2px 7px;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.olabel .c{font:10px var(--mono);opacity:.7}
+.olabel.trk{background:rgba(232,89,12,.85)}
+textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px solid var(--line2);border-radius:6px;padding:6px 8px;resize:vertical}
+.tip{position:fixed;z-index:30;pointer-events:none;background:var(--ink);color:#fff;font-size:11px;padding:5px 8px;border-radius:6px;display:none;white-space:nowrap}
+.tip .ic{font-size:14px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;display:none;z-index:20}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <div class="brand">ElRobot Console</div>
-    <div class="status"><span class="dot" id="conn"></span><span id="port">—</span></div>
-    <div class="status muted" id="busv"></div>
+    <div class="brand"><span class="ic f" style="color:var(--accent);font-size:22px">precision_manufacturing</span>ElRobot</div>
+    <div class="chip" title="로봇 연결"><span class="dot" id="conn"></span><span class="ic" id="link-ic">cable</span><span id="port">—</span></div>
+    <div class="chip" id="volt-chip" title="평균 전압"><span class="ic">bolt</span><span id="volt">—</span></div>
+    <div class="chip" id="temp-chip" title="최고 온도"><span class="ic">thermostat</span><span id="temp">—</span></div>
+    <div class="chip" id="clients-chip" title="접속한 화면 수 (상태는 모두 공유)"><span class="ic">group</span><span id="clients">1</span></div>
     <div class="spacer"></div>
-    <button id="all-off">전체 토크 OFF</button>
-    <button class="estop" id="estop" title="Esc">E-STOP</button>
+    <button class="icon" id="settings-btn" title="설정 · 파이프라인"><span class="ic">settings</span></button>
+    <button id="all-off" title="전체 토크 OFF"><span class="ic">power_settings_new</span>토크 OFF</button>
+    <button class="estop" id="estop" title="비상정지 (Esc)"><span class="ic f">dangerous</span>STOP</button>
   </header>
 
   <aside id="left">
-    <div class="list-h"><h3>모터 <span class="muted mono" id="online"></span></h3>
-      <button class="small" id="all-on">전체 ON</button></div>
-    <div id="motors"></div>
+    <div class="tabs"><div class="tablist" id="ltabs">
+      <button class="tab on" data-l="motors"><span class="ic">memory</span><span class="tn">모터</span></button>
+      <button class="tab" data-l="objects"><span class="ic">category</span><span class="tn">객체</span> <span class="muted mono" id="obj-count"></span></button></div></div>
+    <div class="lpane on" data-l="motors">
+      <div class="list-h"><h3>모터 <span class="muted mono" id="online"></span></h3>
+        <button class="small" id="all-on" title="전체 토크 ON"><span class="ic">power</span>ON</button></div>
+      <div id="motors"></div>
+    </div>
+    <div class="lpane objs" data-l="objects"><div id="hier-list"></div></div>
   </aside>
 
   <main>
     <div id="view"></div>
-    <div class="vbtns"><button id="cam-reset">시점 초기화</button></div>
-    <div class="hint">드래그 회전 · 휠 줌 · 우클릭 이동 · Esc 비상정지</div>
+    <div class="vbtns"><button class="icon" id="cam-reset" title="시점 초기화"><span class="ic">center_focus_strong</span></button></div>
+    <svg class="vgizmo" id="vgizmo" viewBox="-46 -46 92 92"></svg>
+    <div class="olabels" id="olabels"></div>
+    <div class="gzbar" id="gzbar"><span class="ic" data-z="icon">open_with</span><span class="k" data-z="kind"></span>
+      <button class="small" data-z="translate" title="이동 (W)"><span class="ic">open_with</span>이동 W</button>
+      <button class="small" data-z="rotate" title="회전 (E)"><span class="ic">rotate_right</span>회전 E</button>
+      <button class="small icon" data-z="close" title="해제 (Q)"><span class="ic">close</span></button></div>
+    <div class="placebar" id="placebar"><span class="ic" style="color:#1c7ed6">move_location</span><span data-p="name"></span><span class="d" data-p="d"></span>
+      <button class="small" data-p="go" title="로봇이 실제로 옮기기: 계획 → 물리 예측 → 실행"><span class="ic">precision_manufacturing</span>옮기기 실행</button>
+      <button class="small icon" data-p="cancel" title="목표 취소"><span class="ic">undo</span></button></div>
+    <div class="simhud" id="simhud"><span class="chip"><span class="ic">science</span><span data-h="mode"></span></span>
+      <span class="chip" title="시간"><span class="ic">schedule</span><span data-h="t"></span></span>
+      <span class="chip" title="집게 접촉 수직력"><span class="ic">compress</span><span data-h="f"></span></span>
+      <span class="chip" title="물체 들림"><span class="ic">height</span><span data-h="z"></span></span>
+      <span class="vd" data-h="vd"></span></div>
+    <div class="hint"><span><span class="ic">ads_click</span>클릭 선택·기즈모 (W 이동 · E 회전)</span><span><span class="ic">back_hand</span>우클릭 집기</span><span><span class="ic">3d_rotation</span>드래그 회전</span><span><span class="ic">pan_tool</span>우드래그 이동</span><span><span class="ic">zoom_in</span>휠</span><span><span class="ic">dangerous</span>Esc 정지</span></div>
   </main>
 
   <aside id="right" class="dock" data-dock="right">
     <div class="tabs"><div class="tablist"></div>
-      <div class="plus-wrap"><button class="plus" title="패널 추가·제거">+</button><div class="menu"></div></div></div>
+      <div class="plus-wrap"><button class="plus" title="패널 추가·제거"><span class="ic">add</span></button><div class="menu"></div></div></div>
     <div class="dock-body"></div>
   </aside>
 
   <footer class="dock" data-dock="bottom">
     <div class="tabs"><div class="tablist"></div>
-      <div class="plus-wrap"><button class="plus" title="패널 추가·제거">+</button><div class="menu"></div></div></div>
+      <div class="plus-wrap"><button class="plus" title="패널 추가·제거"><span class="ic">add</span></button><div class="menu"></div></div></div>
     <div class="dock-body"></div>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+<div class="modal" id="settings"><div class="box">
+  <div class="head"><span class="ttl"><span class="ic">settings</span>설정</span><div class="tablist"><button class="tab on"><span class="ic">account_tree</span>파이프라인</button></div>
+    <div class="spacer"></div><button class="icon" id="settings-close" title="닫기"><span class="ic">close</span></button></div>
+  <div class="body" id="pipeline"></div>
+</div></div>
+<div class="tip" id="tip"></div>
 <template id="tpl-motor"><section class="pane">
       <div class="hero"><span class="t" data-k="d-title"></span><span class="s" data-k="d-status"></span></div>
       <div class="deg" data-k="d-deg">—</div>
@@ -201,69 +317,126 @@ input[type=range].plain::-webkit-slider-thumb{-webkit-appearance:none;width:13px
       <div class="legend"><span><i style="background:var(--info)"></i>위치</span><span><i style="background:var(--accent)"></i>부하</span><span><i style="background:var(--bad)"></i>전류</span><span style="margin-left:auto">최근 10초</span></div>
       <div class="metrics" data-k="d-metrics"></div>
       <div data-k="d-notes"></div>
-      <details><summary>레지스터 전체 (RAM · EEPROM)</summary><div class="kv" data-k="d-regs"></div>
-        <div style="margin-top:10px"><button class="small" data-k="refresh">EEPROM 다시 읽기</button></div></details>
+      <details><summary><span class="lbl"><span class="ic">memory</span>레지스터</span></summary><div class="kv" data-k="d-regs"></div>
+        <div class="btns"><button class="small" data-k="refresh"><span class="ic">refresh</span>EEPROM</button></div></details>
     </section></template>
 <template id="tpl-calib"><section class="pane">
-      <h4>사용 중인 파일</h4>
+      <h4><span class="ic">description</span>사용 중</h4>
       <div class="card" data-k="c-active"></div>
-
-      <h4>파일 목록</h4>
+      <h4><span class="ic">folder_open</span>파일</h4>
       <div class="files" data-k="c-files"></div>
-      <div class="muted" style="font-size:11px;margin-top:6px">적용하면 토크가 꺼지고, 파일에 저장된 offset이 EEPROM에 다시 써집니다.</div>
-
-      <h4>새로 만들기</h4>
+      <h4><span class="ic">add_circle</span>새로 만들기</h4>
       <div data-k="c-new">
-        <div class="newrow"><input type="text" data-k="c-name" placeholder="파일 이름 (예: follower_v1)"><button class="primary" data-k="c-start">기록 시작</button></div>
-        <div class="muted" style="font-size:11px;margin-top:6px">시작하면 모든 토크 OFF, offset 0, 각도 제한 0–4095로 초기화됩니다.</div>
+        <div class="newrow"><input type="text" data-k="c-name" placeholder="이름 (예: follower_v1)">
+          <button class="primary" data-k="c-start" title="모든 토크 OFF · offset 0 · 각도 제한 0–4095로 초기화 후 기록"><span class="ic">fiber_manual_record</span>기록</button></div>
       </div>
       <div data-k="c-rec" style="display:none">
         <div class="card">
           <div style="font-weight:600" data-k="c-recname"></div>
-          <ol class="steps">
-            <li>팔을 손으로 받치세요. 토크가 꺼져 있어 처집니다.</li>
-            <li>관절을 하나씩 <b>양 끝까지 천천히</b> 움직이세요.</li>
-            <li>끝에서 <b>0.1초 이상 멈춰야</b> 기록됩니다 (흔들림 ±1° 이내). 진한 주황이 저장될 범위, 옅은 주황은 순간 최대치(저장 안 됨), 점선은 URDF 기준입니다.</li>
-          </ol>
+          <div class="isteps"><span><span class="ic">front_hand</span>팔 받치기</span><span><span class="ic">swap_horiz</span>양 끝까지</span><span><span class="ic">timer</span>끝에서 0.1 s 정지</span></div>
           <div data-k="c-bars"></div>
-          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
-            <button data-k="c-cancel">취소</button><button class="primary" data-k="c-finish">저장</button>
+          <div class="btns" style="justify-content:flex-end">
+            <button data-k="c-cancel"><span class="ic">close</span>취소</button><button class="primary" data-k="c-finish"><span class="ic">save</span>저장</button>
           </div>
         </div>
       </div>
-
-      <h4>관절별 값</h4>
+      <h4><span class="ic">table_rows</span>관절별 값</h4>
       <div data-k="c-table"></div>
-
-      <h4>원문 <span class="muted mono" style="font-weight:400" data-k="c-path"></span></h4>
+      <h4><span class="ic">data_object</span>원문 <span class="muted mono" style="font-weight:400" data-k="c-path"></span></h4>
       <pre class="raw" data-k="c-raw"></pre>
     </section></template>
 <template id="tpl-sys"><section class="pane">
-      <h4>제어 설정 <span class="muted" style="font-weight:400">· 전체 모터 공통</span></h4>
-      <div class="setrow"><span>속도</span><b class="mono" data-k="v-speed"></b></div>
+      <h4><span class="ic">cable</span>로봇 연결</h4>
+      <div style="display:flex;gap:6px">
+        <select data-k="r-src" style="flex:1;font:12px var(--mono);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)"></select>
+        <button class="small" data-k="r-apply"><span class="ic">link</span>연결</button></div>
+      <div class="muted" style="font-size:11px;margin:4px 0 0" data-k="r-state"></div>
+      <h4><span class="ic">tune</span>제어 <span class="muted" style="font-weight:400">· 전체 공통</span></h4>
+      <div class="setrow"><span class="lbl"><span class="ic">speed</span>속도</span><b class="mono" data-k="v-speed"></b></div>
       <input type="range" class="plain" data-k="s-speed" min="50" max="2000" step="50" style="width:100%">
-      <div class="setrow"><span>가속 <span class="muted">(0 = 제한 없음)</span></span><b class="mono" data-k="v-accel"></b></div>
+      <div class="setrow" title="0 = 제한 없음"><span class="lbl"><span class="ic">trending_up</span>가속</span><b class="mono" data-k="v-accel"></b></div>
       <input type="range" class="plain" data-k="s-accel" min="0" max="254" step="2" style="width:100%">
-      <div class="setrow"><span>토크 제한</span><b class="mono" data-k="v-tl"></b></div>
+      <div class="setrow" title="모터별 상한: 1–7번 60%, 8번 25% (7.4V 서보)"><span class="lbl"><span class="ic">fitness_center</span>토크 제한</span><b class="mono" data-k="v-tl"></b></div>
       <input type="range" class="plain" data-k="s-tl" min="0" max="1000" step="10" style="width:100%">
-      <div class="muted" style="font-size:11px;margin-top:10px">손을 떼면 바로 적용됩니다. 모터별 상한: 1–7번 60%, 8번 25% (7.4V 서보).</div>
     </section></template>
 <template id="tpl-ctrl"><section class="pane"><div class="ctrl"></div></section></template>
 <template id="tpl-log"><section class="pane logpane"></section></template>
-<template id="tpl-cam"><section class="pane">
-  <div class="hero"><span class="t">iPhone LiDAR</span><span class="s" data-k="k-status"></span></div>
-  <div class="metrics" data-k="k-metrics"></div>
-  <h4>점군 표시</h4>
-  <div class="setrow"><span>보이기</span><input type="checkbox" data-k="k-show" checked></div>
-  <div class="setrow"><span>점 크기</span><b class="mono" data-k="k-size-v"></b></div>
-  <input type="range" class="plain" data-k="k-size" min="1" max="12" step="1" value="4" style="width:100%">
-  <div style="display:flex;gap:6px;margin-top:12px">
-    <button class="small" data-k="k-fit">점군에 시점 맞추기</button>
-    <button class="small" data-k="k-phone">iPhone 시점으로 보기</button>
+<template id="tpl-grasp"><section class="pane">
+  <h4><span class="ic">open_with</span>좌표계 정렬</h4>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <select data-k="g-target" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
+      <option value="none">조정 안 함</option><option value="robot">로봇</option><option value="world">iPhone 월드</option></select>
+    <select data-k="g-mode" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
+      <option value="translate">이동</option><option value="rotate">회전</option></select>
+    <button class="icon small" data-k="g-reset" title="선택 대상 초기화"><span class="ic">restart_alt</span></button>
   </div>
-  <h4>AprilTag (36h11, 한 변 6cm)</h4>
+  <div class="kv" data-k="g-reg"></div>
+  <h4><span class="ic">back_hand</span>파지</h4>
+  <div class="kv" data-k="g-state"></div>
+  <div class="btns">
+    <button class="small" data-k="g-preview" title="가상 로봇 + 물리 예측 재생 (2배속)"><span class="ic">play_circle</span>미리보기</button>
+    <button class="small primary" data-k="g-exec" title="실제 로봇 실행"><span class="ic">play_arrow</span>실행</button>
+    <button class="small" data-k="g-cancel"><span class="ic">close</span>취소</button>
+  </div>
+</section></template>
+<template id="tpl-cam"><section class="pane">
+  <div class="hero"><span class="t lbl"><span class="ic">photo_camera</span>iPhone LiDAR</span><span class="s" data-k="k-status"></span></div>
+  <div style="display:flex;gap:6px;align-items:center;margin-top:10px">
+    <select data-k="k-link" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);max-width:190px"></select>
+    <input type="text" data-k="k-host" placeholder="iPhone IP" style="flex:1;min-width:0">
+    <button class="small" data-k="k-link-apply"><span class="ic">link</span>연결</button>
+  </div>
+  <div class="muted" style="font-size:11px;margin-top:4px" data-k="k-stage"></div>
+  <div data-k="k-virtual" style="display:none;margin-top:8px">
+    <div class="setrow"><span class="lbl"><span class="ic">kitchen</span>가상 장면</span>
+      <select data-k="k-vscene" style="font:12px var(--sans);padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
+        <option value="kitchen">주방 (실제 메시)</option><option value="boxes">상자 3개</option></select></div>
+    <div class="btns" style="margin-top:4px" title="가상 장면 물체 놓기/치우기" data-k="k-vobjs"></div>
+  </div>
+  <div class="metrics" data-k="k-metrics"></div>
+  <h4><span class="ic">view_in_ar</span>복원</h4>
+  <div class="kv" data-k="k-recon"></div>
+  <div class="btns">
+    <button class="small primary" data-k="k-rstart"><span class="ic">play_arrow</span>시작</button>
+    <button class="small" data-k="k-rstop"><span class="ic">stop</span>정지</button>
+    <button class="small" data-k="k-rreset"><span class="ic">restart_alt</span>초기화</button>
+  </div>
+  <div class="setrow"><span class="lbl"><span class="ic">landscape</span>배경 메시</span><input type="checkbox" data-k="k-mesh" checked></div>
+  <div class="setrow"><span class="lbl"><span class="ic">category</span>물체 (분리)</span><input type="checkbox" data-k="k-objs" checked></div>
+  <div class="setrow" title="안 보인 면을 상자/원통/높이맵으로 닫음 (끄면 원본 TSDF)"><span class="lbl"><span class="ic">deployed_code</span>물체 완성</span><input type="checkbox" data-k="k-complete" checked></div>
+  <div class="setrow" title="관측된 바닥으로 둘러싸인 빈칸·물체 밑을 바닥 평면으로 채움"><span class="lbl"><span class="ic">texture</span>바닥 추정 채움</span><input type="checkbox" data-k="k-fill" checked></div>
+  <h4><span class="ic">image_search</span>물체 인식 <span class="muted" style="font-weight:400">· YOLOE 분할 + 3D 연결 · 약 1 Hz</span></h4>
+  <div class="kv" data-k="k-det"></div>
+  <div class="btns">
+    <button class="small primary" data-k="k-dstart"><span class="ic">play_arrow</span>시작</button>
+    <button class="small" data-k="k-dstop"><span class="ic">stop</span>정지</button>
+    <button class="small" data-k="k-dreset" title="누적된 종류 투표·마스크 물체 지우기"><span class="ic">restart_alt</span>초기화</button>
+  </div>
+  <div class="setrow" title="Prompt Depth Anything: LiDAR를 프롬프트로 RGB 해상도 깊이 (인식 프레임에만, 물체 인스턴스용). 가상 장면에서는 LiDAR가 이미 깨끗해 이득 없음 (측정)">
+    <span class="lbl"><span class="ic">deblur</span>깊이 향상</span>
+    <select data-k="k-depth" style="font:12px var(--sans);padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
+      <option value="off">끔 (LiDAR)</option><option value="small">PromptDA Small</option><option value="large">PromptDA Large</option></select></div>
+  <details style="margin-top:10px"><summary><span class="lbl"><span class="ic">translate</span>인식 어휘 (영어=한국어, 한 줄에 하나)</span></summary>
+    <textarea class="vocab" data-k="k-vocab" spellcheck="false"></textarea>
+    <div class="btns"><button class="small" data-k="k-vapply"><span class="ic">check</span>적용</button></div></details>
+  <h4><span class="ic">scatter_plot</span>점군</h4>
+  <div class="setrow"><span class="lbl"><span class="ic">visibility</span>보이기</span><input type="checkbox" data-k="k-show" checked></div>
+  <div class="setrow"><span class="lbl"><span class="ic">grain</span>점 크기</span><b class="mono" data-k="k-size-v"></b></div>
+  <input type="range" class="plain" data-k="k-size" min="1" max="12" step="0.5" value="2.5" style="width:100%">
+  <div class="btns">
+    <button class="small" data-k="k-fit"><span class="ic">fit_screen</span>맞추기</button>
+    <button class="small" data-k="k-phone"><span class="ic">smartphone</span>iPhone 시점</button>
+  </div>
+  <h4><span class="ic">grid_on</span>바닥 마커 <span class="muted" style="font-weight:400">· 태그 ID 0 (6 cm) / ChArUco</span></h4>
+  <div data-k="k-board" class="kv"></div>
+  <div class="btns">
+    <button class="small primary" data-k="k-lock"><span class="ic">lock</span>고정</button>
+    <button class="small" data-k="k-unlock"><span class="ic">lock_open</span>해제</button>
+  </div>
+  <div class="muted" style="font-size:11px;margin-top:6px" data-k="k-floor-note"></div>
+  <h4><span class="ic">qr_code_2</span>AprilTag</h4>
   <div data-k="k-tags" class="muted" style="font-size:12px"></div>
-  <div class="muted" style="font-size:11px;margin-top:10px">좌표계: ARKit 세계 좌표 (y 위쪽, 중력 기준). 로봇 좌표계 정렬은 다음 단계에서 태그로 맞춥니다.</div>
+  <div class="muted" style="font-size:11px;margin-top:10px" data-k="k-frame"></div>
 </section></template>
 
 <script type="importmap">
@@ -276,6 +449,7 @@ input[type=range].plain::-webkit-slider-thumb{-webkit-appearance:none;width:13px
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import URDFLoader from 'urdf-loader';
 
 const MOTORS = [
@@ -308,25 +482,55 @@ const statusText = st => Object.entries(STATUS_BITS).filter(([b]) => st & (1 << 
 
 // ---------------------------------------------------------------- 3D
 const view = $('#view');
-const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(devicePixelRatio);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 view.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 20);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb8bec8, 1.6));
-const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(1, 2, 1.5); scene.add(dl);
-scene.add(new THREE.GridHelper(1.2, 24, 0xc3c8d0, 0xdde1e6));
+// simulation-style scene view: sky gradient, fog to the horizon, sun with soft shadows, metric grid with axes
+scene.background = (() => {
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#9fb3c8'); gr.addColorStop(0.55, '#d5dde6'); gr.addColorStop(1, '#e9ecef');
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+scene.fog = new THREE.Fog(0xdde3ea, 3, 9);
+scene.add(new THREE.HemisphereLight(0xeef3f8, 0x8d939b, 1.25));
+const dl = new THREE.DirectionalLight(0xffffff, 1.9); dl.position.set(0.9, 2.2, 1.2); dl.castShadow = true;
+dl.shadow.mapSize.set(2048, 2048); dl.shadow.bias = -0.0004; dl.shadow.normalBias = 0.01;
+Object.assign(dl.shadow.camera, {left: -0.9, right: 0.9, top: 0.9, bottom: -0.9, near: 0.5, far: 5}); scene.add(dl);
+{
+  const fine = new THREE.GridHelper(4, 80, 0xb4bcc6, 0xc7cdd4), major = new THREE.GridHelper(4, 8, 0x98a2ae, 0x98a2ae);
+  fine.material.transparent = major.material.transparent = true; fine.material.opacity = 0.45; major.material.opacity = 0.7;
+  major.position.y = fine.position.y = -0.0005; scene.add(fine, major);
+  const axis = (a, b, col) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), new THREE.LineBasicMaterial({color: col}));
+  scene.add(axis([-2, 0, 0], [2, 0, 0], 0xe03131), axis([0, 0, -2], [0, 0, 2], 0x1c7ed6));
+  const shadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.ShadowMaterial({opacity: 0.2}));
+  shadowCatcher.rotation.x = -Math.PI / 2; shadowCatcher.position.y = 0.0002; shadowCatcher.receiveShadow = true; scene.add(shadowCatcher);
+}
 
 // iPhone point cloud lives in `world` (ARKit world frame, y up). Identity until the robot is registered.
 const CLOUD_MAX = 49152;
-const world = new THREE.Group(); scene.add(world);
+// scene ← worldAdj (user adjustment) ← world (floor transform) ← iPhone ARKit data
+const worldAdj = new THREE.Group(); worldAdj.matrixAutoUpdate = false; scene.add(worldAdj);
+const world = new THREE.Group(); worldAdj.add(world);
+// scene ← robotRoot (user adjustment) ← robot (URDF base_link, fixed z-up → y-up rotation)
+const robotRoot = new THREE.Group(); robotRoot.matrixAutoUpdate = false; scene.add(robotRoot);
 const cloudGeom = new THREE.BufferGeometry();
 cloudGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CLOUD_MAX * 3), 3));
 cloudGeom.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(CLOUD_MAX * 3), 3, true));
 cloudGeom.setDrawRange(0, 0);
-const cloudMat = new THREE.PointsMaterial({size: 0.004, vertexColors: true, sizeAttenuation: true});
+const DOT = (() => {   // round soft sprite so points read as dots, not squares
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.6, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c);
+})();
+const cloudMat = new THREE.PointsMaterial({size: 0.0025, vertexColors: true, sizeAttenuation: true, map: DOT, transparent: true, opacity: 0.45, depthWrite: false, alphaTest: 0.05});
 const cloud = new THREE.Points(cloudGeom, cloudMat);
 cloud.frustumCulled = false;
 world.add(cloud);
@@ -338,6 +542,113 @@ const phone = (() => {  // camera frustum in ARKit camera axes: looks along -z, 
   o.matrixAutoUpdate = false; o.visible = false; world.add(o); return o;
 })();
 const camInfo = {T: null, n: 0, hz: 0, _t: [], fitted: false};
+const reconMesh = new THREE.Mesh(new THREE.BufferGeometry(),
+  new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.9, side: THREE.DoubleSide}));
+reconMesh.frustumCulled = false; reconMesh.receiveShadow = true;
+world.add(reconMesh);
+// objects cut out of the room mesh, each its own per-object TSDF (/recon_objects)
+const reconObjs = new THREE.Group(); world.add(reconObjs);
+const OBJ_COLORS = [0xe8590c, 0x1c7ed6, 0x2f9e44, 0xae3ec9, 0xf08c00, 0x0ca678, 0xd6336c];
+// each object: raw per-object TSDF + geometric completion (box / cylinder / height map); one of the two is shown
+let showComplete = true;
+async function loadReconObjects(){
+  const [buf, fb] = await Promise.all([fetch('/recon_objects').then(r => r.arrayBuffer()), fetch('/recon_fill').then(r => r.arrayBuffer())]);
+  for(const c of [...reconObjs.children]){ c.traverse(x => { x.geometry?.dispose(); x.material?.dispose(); }); reconObjs.remove(c); }
+  let o = 0;
+  const take = (B, T, len, bytes) => { const a = new T(B.slice(o, o + len * bytes)); o += len * bytes; return a; };  // colour blocks break 4-byte alignment
+  const mesh = B => {
+    const [nv, nt] = take(B, Uint32Array, 2, 4), g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(take(B, Float32Array, nv * 3, 4), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(take(B, Float32Array, nv * 3, 4), 3));
+    g.setIndex(new THREE.BufferAttribute(take(B, Uint32Array, nt * 3, 4), 1));
+    g.setAttribute('color', new THREE.BufferAttribute(take(B, Uint8Array, nv * 3, 1), 3, true));
+    return g;
+  };
+  if(fb.byteLength >= 8){ o = 0; fillMesh.geometry.dispose(); fillMesh.geometry = mesh(fb); } else { fillMesh.geometry.dispose(); fillMesh.geometry = new THREE.BufferGeometry(); }
+  if(buf.byteLength < 4) return;
+  o = 0;
+  const n = take(buf, Uint32Array, 1, 4)[0];
+  for(let k = 0; k < n; k++){
+    const id = take(buf, Uint32Array, 1, 4)[0], raw = mesh(buf), full = mesh(buf);
+    const m = new THREE.Mesh(showComplete ? full : raw, new THREE.MeshStandardMaterial({vertexColors: true, roughness: .55, side: THREE.DoubleSide}));
+    m.userData = {objId: id, raw, full};
+    // instance outline: sharp edges in a per-object colour
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 50), new THREE.LineBasicMaterial({color: OBJ_COLORS[id % OBJ_COLORS.length]})));
+    m.frustumCulled = false; m.castShadow = m.receiveShadow = true; reconObjs.add(m);
+  }
+  markSelected();
+}
+function setShowComplete(on){
+  showComplete = on;
+  for(const m of reconObjs.children){
+    m.geometry = on ? m.userData.full : m.userData.raw;
+    const e = m.children[0]; e.geometry.dispose(); e.geometry = new THREE.EdgesGeometry(m.geometry, 50);
+  }
+}
+// mask-only objects from the recogniser (e.g. a knife blade thinner than the depth noise): fused 3-D points
+const trkGeom = new THREE.BufferGeometry();
+const trkPts = new THREE.Points(trkGeom, new THREE.PointsMaterial({color: 0xe8590c, size: 0.004, map: DOT, transparent: true, opacity: 0.85, depthWrite: false, alphaTest: 0.05}));
+trkPts.frustumCulled = false; world.add(trkPts);
+let trkKey = null;
+async function loadTracks(){
+  const ts = S?.camera?.detect?.tracks || [], key = JSON.stringify(ts.map(t => [t.id, t.points]));
+  if(key === trkKey) return;
+  trkKey = key;
+  const buf = await (await fetch('/detect_tracks')).arrayBuffer();
+  if(buf.byteLength < 4){ trkGeom.setDrawRange(0, 0); return; }
+  const n = new Uint32Array(buf, 0, 1)[0], all = [];
+  let o = 4;
+  for(let k = 0; k < n; k++){
+    const [id, m] = new Uint32Array(buf.slice(o, o + 8)); o += 8;
+    all.push(new Float32Array(buf.slice(o, o + m * 12))); o += m * 12;
+  }
+  const P = new Float32Array(all.reduce((a, x) => a + x.length, 0)); let i = 0; for(const x of all){ P.set(x, i); i += x.length; }
+  trkGeom.setAttribute('position', new THREE.BufferAttribute(P, 3)); trkGeom.setDrawRange(0, P.length / 3);
+}
+// inferred floor (holes enclosed by observed floor + under objects)
+const fillMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.9}));
+fillMesh.receiveShadow = true; fillMesh.frustumCulled = false; world.add(fillMesh);
+// floor orthophoto (/recon_floor.png): the observed floor as one flat textured plane, object footprints inpainted —
+// replaces the room mesh's floor band (1 cm ripples, colour bleed) and the blocky hole fill
+const floorPhoto = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({roughness: 0.95, transparent: true, alphaTest: 0.5}));
+floorPhoto.visible = false; floorPhoto.receiveShadow = true; floorPhoto.frustumCulled = false; world.add(floorPhoto);
+let floorPhotoVer = null, showFill = true;
+function loadFloorPhoto(){
+  const f = S?.camera?.recon?.floor_photo;
+  if(!f?.lo){ if(floorPhotoVer !== null){ floorPhotoVer = null; floorPhoto.visible = false; fillMesh.visible = showFill; } return; }
+  if(f.version === floorPhotoVer) return;
+  floorPhotoVer = f.version;
+  new THREE.TextureLoader().load('/recon_floor.png?v=' + f.version, tex => {   // rows = +z, columns = +x
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    floorPhoto.material.map?.dispose(); floorPhoto.material.map = tex; floorPhoto.material.needsUpdate = true;
+    floorPhoto.scale.set(f.hi[0] - f.lo[0], 1, f.hi[1] - f.lo[1]);
+    floorPhoto.position.set((f.lo[0] + f.hi[0]) / 2, f.y + 0.0005, (f.lo[1] + f.hi[1]) / 2);
+    floorPhoto.visible = showFill; fillMesh.visible = false;
+  });
+}
+let reconVersion = -1, reconLoading = false, cloudAutoHidden = false;
+async function loadReconMesh(){
+  reconLoading = true;
+  try {
+    const buf = await (await fetch('/recon_mesh')).arrayBuffer();
+    if(buf.byteLength < 8) return;
+    const [nv, nt] = new Uint32Array(buf, 0, 2);
+    let o = 8;
+    const pos = new Float32Array(buf, o, nv * 3); o += nv * 12;
+    const nrm = new Float32Array(buf, o, nv * 3); o += nv * 12;
+    const idx = new Uint32Array(buf, o, nt * 3); o += nt * 12;
+    const col = new Uint8Array(buf, o, nv * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3, true));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    reconMesh.geometry.dispose(); reconMesh.geometry = g;
+    if(nv > 0 && !cloudAutoHidden){ cloudAutoHidden = true; cloud.visible = false; }   // the mesh replaces the noisy live points
+    await loadReconObjects();
+  } finally { reconLoading = false; }
+}
 
 const MAT = {
   body: new THREE.MeshStandardMaterial({color:0xe9ebee, roughness:.6}),
@@ -359,7 +670,7 @@ new URDFLoader(manager).load('/robot/elrobot_follower.urdf', r => {
   robot = r;
   robot.rotation.set(-Math.PI/2, 0, -Math.PI/2);
   for(const [n, j] of Object.entries(robot.joints)) if(j.limit) limits[n] = {lower:+j.limit.lower, upper:+j.limit.upper};
-  scene.add(robot);
+  robotRoot.add(robot);
   updateRobot();
 });
 function servoIdOf(mesh){
@@ -369,10 +680,29 @@ function servoIdOf(mesh){
 function paintRobot(){
   if(!robot) return;
   robot.traverse(o => {
-    if(!o.isMesh) return;
+    if(!o.isMesh || o.userData.overlay) return;          // ghost object etc. keep their own material
+    o.castShadow = true;
     const sid = servoIdOf(o), m = sid && S?.motors?.[sid];
     o.material = sid == null ? MAT.body : (m && (m.online === false || m.status)) ? MAT.err : sid === sel ? MAT.sel : MAT.servo;
   });
+}
+// virtual robot: a second, semi-transparent URDF that replays the physics prediction (simulated joints)
+let ghostRobot = null;
+const GHOST_MAT = new THREE.MeshStandardMaterial({color: 0x4dabf7, transparent: true, opacity: 0.35, depthWrite: false, roughness: .5});
+{
+  const gm = new THREE.LoadingManager();
+  gm.onLoad = () => ghostRobot?.traverse(o => { if(o.isMesh){ o.material = GHOST_MAT; o.renderOrder = 3; } });
+  new URDFLoader(gm).load('/robot/elrobot_follower.urdf', r => {
+    ghostRobot = r; r.rotation.set(-Math.PI/2, 0, -Math.PI/2); r.visible = false; robotRoot.add(r);
+  });
+}
+function setGhostQ(q){
+  if(!ghostRobot) return;
+  ghostRobot.visible = !!q;
+  if(!q) return;
+  // STL meshes can arrive after the loader's onLoad: (re)apply the ghost material whenever it is shown
+  ghostRobot.traverse(o => { if(o.isMesh && o.material !== GHOST_MAT){ o.material = GHOST_MAT; o.renderOrder = 3; } });
+  MOTORS.forEach((m, i) => ghostRobot.setJointValue(m.joint, q[i]));
 }
 function updateRobot(){
   if(!robot || !S) return;
@@ -386,7 +716,45 @@ function updateRobot(){
 }
 function resize(){ const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe(view); resize();
-(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+// view gizmo (top right): axes as seen from the camera; click an end to look along that axis
+const AX = [['X', 0xe03131, [1, 0, 0]], ['Y', 0x2f9e44, [0, 1, 0]], ['Z', 0x1c7ed6, [0, 0, 1]]];
+function drawGizmo(){
+  const qi = camera.quaternion.clone().invert(), items = [];
+  for(const [n, col, v] of AX) for(const sgn of [1, -1]){
+    const p = new THREE.Vector3(...v).multiplyScalar(sgn).applyQuaternion(qi);
+    items.push({n, sgn, col: '#' + col.toString(16).padStart(6, '0'), x: p.x * 30, y: -p.y * 30, z: p.z, v: v.map(a => a * sgn)});
+  }
+  items.sort((a, b) => a.z - b.z);
+  $('#vgizmo').innerHTML = `<circle r="44" fill="rgba(255,255,255,.35)"/>` + items.map(it => (it.sgn > 0 ? `<line x1="0" y1="0" x2="${it.x}" y2="${it.y}" stroke="${it.col}" stroke-width="2.5"/>` : '') +
+    `<circle data-v="${it.v}" cx="${it.x}" cy="${it.y}" r="${it.sgn > 0 ? 9 : 6}" fill="${it.sgn > 0 ? it.col : '#fff'}" stroke="${it.col}" stroke-width="2"/>` +
+    (it.sgn > 0 ? `<text x="${it.x}" y="${it.y}">${it.n}</text>` : '')).join('');
+}
+$('#vgizmo').addEventListener('click', e => {
+  const v = e.target.dataset?.v; if(!v) return;
+  const dir = new THREE.Vector3(...v.split(',').map(Number)), d = camera.position.distanceTo(controls.target);
+  if(Math.abs(dir.y) > 0.9) dir.z += 1e-3;                 // OrbitControls cannot look exactly along y
+  camera.position.copy(controls.target).add(dir.normalize().multiplyScalar(d)); controls.update();
+});
+function drawLabels(){
+  const box = $('#olabels'), objs = S?.camera?.recon?.objects || [], trks = S?.camera?.detect?.tracks || [];
+  const items = [...objs.filter(o => o.label).map(o => ({k: 'o' + o.id, c: o.centre, h: (o.dims_mm?.[2] ?? o.size_mm[1]) / 1000, t: o.label.name, s: `${Math.round(o.label.conf * 100)}%`, trk: false})),
+                 ...trks.map(t => ({k: 't' + t.id, c: t.centre, h: t.size_mm[1] / 1000, t: t.name, s: `마스크 ×${t.hits}`, trk: true}))];
+  if(!reconObjs.visible || !items.length){ if(box.childElementCount) box.innerHTML = ''; return; }
+  world.updateMatrixWorld(true);
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight, seen = new Set();
+  for(const it of items){
+    let el = box.querySelector(`[data-k="${it.k}"]`);
+    if(!el){ el = document.createElement('div'); el.dataset.k = it.k; box.appendChild(el); }
+    el.className = 'olabel' + (it.trk ? ' trk' : '');
+    const html = `${esc(it.t)}<span class="c">${it.s}</span>`; if(el.innerHTML !== html) el.innerHTML = html;
+    const p = new THREE.Vector3(it.c[0], it.c[1] + it.h / 2 + 0.012, it.c[2]).applyMatrix4(world.matrixWorld).project(camera);
+    el.style.display = p.z < 1 ? '' : 'none';
+    el.style.left = `${(p.x + 1) / 2 * w}px`; el.style.top = `${(1 - p.y) / 2 * h}px`;
+    seen.add(it.k);
+  }
+  for(const el of [...box.children]) if(!seen.has(el.dataset.k)) el.remove();
+}
+(function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); })();
 
 // ---------------------------------------------------------------- slider views (left accordion + every 조작 panel)
 const SLIDER_HTML = `<div class="slider-wrap"><div class="live-mark"></div><input type="range" min="0" max="4095" disabled></div>
@@ -480,8 +848,10 @@ const fmtSet = {speed: v => `${v} st/s`, accel: v => `${v}`, tl: v => `${(v / 10
 
 const PANEL_DEFS = {
   sys: {
-    name: '시스템',
+    name: '시스템', icon: 'dns',
     init(P){
+      q(P.root, 'r-src').addEventListener('change', () => { P.rEditing = true; });
+      q(P.root, 'r-apply').addEventListener('click', () => { P.rEditing = false; send({type:'robot_source', source:q(P.root, 'r-src').value}); });
       for(const k of ['speed', 'accel', 'tl']){
         const el = q(P.root, `s-${k}`);
         el.addEventListener('input', () => { P.drag = true; q(P.root, `v-${k}`).textContent = fmtSet[k](+el.value); });
@@ -489,13 +859,21 @@ const PANEL_DEFS = {
       }
     },
     render(P){
+      const ports = S.ports || [], key = JSON.stringify(ports);
+      if(key !== P.portKey && !P.rEditing){
+        P.portKey = key;
+        q(P.root, 'r-src').innerHTML = `<option value="auto">자동 (첫 USB 포트)</option>` + ports.map(p => `<option value="${esc(p)}">USB · ${esc(p.replace('/dev/cu.', ''))}</option>`).join('')
+          + `<option value="virtual">가상 로봇</option>`;
+      }
+      if(!P.rEditing) q(P.root, 'r-src').value = S.robot_source || 'auto';
+      q(P.root, 'r-state').textContent = S.connected ? `연결됨: ${S.port}` : (S.error || '연결 안 됨');
       if(P.drag) return;
       const st = S.settings, vals = {speed:st.speed, accel:st.accel, tl:st.torque_limit};
       for(const k in vals){ q(P.root, `s-${k}`).value = vals[k]; q(P.root, `v-${k}`).textContent = fmtSet[k](vals[k]); }
     },
   },
   motor: {
-    name: '모터',
+    name: '모터', icon: 'memory',
     init(P){ q(P.root, 'refresh').addEventListener('click', () => send({type:'refresh'})); },
     render(P){
       const r = P.root, m = MOTORS[sel-1], live = S.motors?.[sel], ram = S.ram?.[sel], e = S.eeprom?.[sel], a = arcOf(sel);
@@ -523,10 +901,10 @@ const PANEL_DEFS = {
     },
   },
   calib: {
-    name: '캘리브레이션',
+    name: '캘리브레이션', icon: 'straighten',
     init(P){
       const r = P.root;
-      q(r, 'c-files').addEventListener('click', e => { const n = e.target.dataset.apply; if(n) send({type:'calib_select', name:n}); });
+      q(r, 'c-files').addEventListener('click', e => { const n = e.target.closest('[data-apply]')?.dataset.apply; if(n) send({type:'calib_select', name:n}); });
       q(r, 'c-table').addEventListener('change', e => { const id = e.target.dataset.inv; if(id) send({type:'invert', id:+id, on:e.target.checked}); });
       q(r, 'c-start').addEventListener('click', () => send({type:'calib_new', name:q(r, 'c-name').value.trim()}));
       q(r, 'c-cancel').addEventListener('click', () => send({type:'calib_cancel'}));
@@ -563,7 +941,7 @@ const PANEL_DEFS = {
     },
   },
   log: {
-    name: '로그',
+    name: '로그', icon: 'receipt_long',
     init(){},
     render(P){
       const txt = (S.log || []).join('\n');
@@ -571,7 +949,7 @@ const PANEL_DEFS = {
     },
   },
   ctrl: {
-    name: '조작',
+    name: '조작', icon: 'tune',
     init(P){
       const grid = P.root.querySelector('.ctrl');
       for(const m of MOTORS){
@@ -583,27 +961,140 @@ const PANEL_DEFS = {
     render(){},  // sliders are refreshed by renderList for every view
   },
   cam: {
-    name: '카메라',
+    name: '카메라', icon: 'photo_camera',
     init(P){
       const r = P.root;
       q(r, 'k-show').addEventListener('change', e => { cloud.visible = e.target.checked; });
+      const syncHost = () => { q(r, 'k-host').style.display = q(r, 'k-link').value === 'wifi' ? '' : 'none'; };
+      q(r, 'k-link').addEventListener('change', () => { P.editing = true; syncHost(); });
+      q(r, 'k-host').addEventListener('input', () => { P.editing = true; });
+      q(r, 'k-link-apply').addEventListener('click', () => { P.editing = false; send({type:'cam_config', link:q(r, 'k-link').value, host:q(r, 'k-host').value}); });
+      P.syncHost = syncHost;
+      q(r, 'k-virtual').addEventListener('click', e => { const i = e.target.closest('[data-vobj]')?.dataset.vobj; if(i !== undefined) send({type:'cam_virtual_toggle', index:+i}); });
+      q(r, 'k-vscene').addEventListener('change', e => send({type:'cam_virtual_scene', scene: e.target.value}));
+      q(r, 'k-dstart').addEventListener('click', () => send({type:'detect_start'}));
+      q(r, 'k-dstop').addEventListener('click', () => send({type:'detect_stop'}));
+      q(r, 'k-dreset').addEventListener('click', () => send({type:'detect_reset'}));
+      q(r, 'k-depth').addEventListener('change', e => send({type:'detect_depth', mode: e.target.value}));
+      q(r, 'k-vocab').addEventListener('input', () => { P.vocabEditing = true; });
+      q(r, 'k-vapply').addEventListener('click', () => {
+        const vocab = q(r, 'k-vocab').value.split('\n').map(l => l.split('=')).filter(x => x[0].trim()).map(([e, k]) => [e.trim(), (k || e).trim()]);
+        P.vocabEditing = false; send({type:'detect_vocab', vocab}); toast('어휘를 바꿨습니다 — 다음 인식부터 적용');
+      });
+      q(r, 'k-mesh').addEventListener('change', e => { reconMesh.visible = e.target.checked; });
+      q(r, 'k-objs').addEventListener('change', e => { reconObjs.visible = e.target.checked; });
+      q(r, 'k-complete').addEventListener('change', e => setShowComplete(e.target.checked));
+      q(r, 'k-fill').addEventListener('change', e => {
+        showFill = e.target.checked; floorPhoto.visible = showFill && !!floorPhotoVer; fillMesh.visible = showFill && !floorPhotoVer; });
+      q(r, 'k-rstart').addEventListener('click', () => send({type:'recon_start'}));
+      q(r, 'k-rstop').addEventListener('click', () => send({type:'recon_stop'}));
+      q(r, 'k-rreset').addEventListener('click', () => send({type:'recon_reset'}));
       q(r, 'k-size').addEventListener('input', e => { cloudMat.size = +e.target.value / 1000; });
       q(r, 'k-fit').addEventListener('click', fitCloud);
       q(r, 'k-phone').addEventListener('click', viewFromPhone);
+      q(r, 'k-lock').addEventListener('click', () => send({type:'floor_lock'}));
+      q(r, 'k-unlock').addEventListener('click', () => send({type:'floor_clear'}));
     },
     render(P){
       const r = P.root, c = S.camera || {};
-      q(r, 'k-status').innerHTML = c.connected ? '<span style="color:var(--ok)">연결됨</span>' : `<span style="color:var(--bad)">${esc(c.error || '연결 안 됨')}</span>`;
+      const linkName = {usb: 'USB', wifi: 'WiFi', virtual: '가상 카메라'}[c.link] || c.link;
+      q(r, 'k-status').innerHTML = c.connected ? `<span style="color:var(--ok)">스트리밍 (${linkName})</span>` : '<span style="color:var(--bad)">수신 없음</span>';
+      const devs = c.usb_devices || [], optKey = JSON.stringify(devs);
+      if(optKey !== P.optKey && !P.editing){   // USB iPhones appear in the list automatically
+        P.optKey = optKey;
+        q(r, 'k-link').innerHTML = (devs.length ? devs.map(d => `<option value="usb">USB · iPhone ${esc(d.serial.slice(0, 8))}…</option>`).join('')
+            : '<option value="usb">USB (연결된 iPhone 없음)</option>') + '<option value="wifi">WiFi (IP 입력)</option><option value="virtual">가상 카메라</option>';
+      }
+      if(!P.editing){ q(r, 'k-link').value = c.link || 'usb'; q(r, 'k-host').value = c.host || ''; P.syncHost(); }
+      q(r, 'k-virtual').style.display = c.link === 'virtual' ? '' : 'none';
+      const vk = JSON.stringify(c.virtual_objects);
+      if(vk !== P.vobjKey){ P.vobjKey = vk; q(r, 'k-vobjs').innerHTML = (c.virtual_objects || []).map((n, i) => `<button class="small" data-vobj="${i}"><span class="ic">deployed_code</span>${esc(n)}</button>`).join(''); }
+      if(document.activeElement !== q(r, 'k-vscene')) q(r, 'k-vscene').value = c.virtual_scene || 'kitchen';
+      for(const b of q(r, 'k-virtual').querySelectorAll('[data-vobj]')) b.classList.toggle('primary', !(c.virtual_hidden || []).includes(+b.dataset.vobj));
+      q(r, 'k-stage').textContent = c.connected ? '' : (c.error ? `${c.error}` : (c.stage || ''));
       q(r, 'k-metrics').innerHTML = [
         ['수신', `${c.fps ?? 0} fps`], ['화면 갱신', `${camInfo.hz} Hz`], ['점 개수', `${(camInfo.n || 0).toLocaleString()}`],
+        ['연결', c.link === 'wifi' ? `WiFi ${esc(c.host || '')}` : linkName], ['깊이 신뢰도', c.confidence ? '사용' : '미제공 (전부 사용)'], ['로봇', S.connected ? '연결됨' : '없음'],
       ].map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
-      q(r, 'k-size-v').textContent = `${(cloudMat.size * 1000).toFixed(0)} mm`;
+      q(r, 'k-size-v').textContent = `${(cloudMat.size * 1000).toFixed(1)} mm`;
+      q(r, 'k-show').checked = cloud.visible;
       const tags = Object.entries(c.tags || {});
+      const rc = c.recon;
+      q(r, 'k-recon').innerHTML = !rc ? kv([['상태', '카메라 모듈 없음']]) : !rc.available ? kv([['상태', esc(rc.error || 'open3d 없음')]])
+        : kv([['상태', rc.running ? '<span style="color:var(--ok)">통합 중</span>' : '정지'], ['통합 프레임', rc.frames],
+              ['메시', `${rc.verts.toLocaleString()} 정점 · ${rc.tris.toLocaleString()} 삼각형`], ['복셀', `${rc.voxel_mm} mm · 블록 ${rc.blocks.toLocaleString()} / 30,000`],
+              ['처리 시간', `통합 ${rc.integrate_ms} ms · 추출 ${rc.extract_ms} ms`],
+              ['물체 분리', S.camera?.auto_floor || S.camera?.floor ? `${(rc.objects || []).length}개 · ${rc.split_ms ?? 0} ms` : '바닥 미검출'],
+              ['바닥 추정 채움', rc.fill ? `${rc.fill.cells} 칸 · ${rc.fill.area_m2} m² · ${rc.fill.ms} ms` : '-'],
+              ...(rc.error ? [['오류', esc(rc.error)]] : [])]);
+      const dt = c.detect;
+      q(r, 'k-det').innerHTML = !dt ? kv([['상태', '모듈 없음']]) : kv([
+        ['상태', dt.running ? `<span style="color:var(--ok)">인식 중</span>` : '정지'],
+        ['모델', dt.model ? `${dt.model} · ${dt.mode === 'text' ? '글자 지정' : '이름 없이'} · 어휘 ${dt.vocab_size}` : '시작하면 불러옴 (처음 약 1분)'],
+        ['처리', `인식 ${dt.ms} ms${dt.depth_mode !== 'off' ? ` + 깊이 ${dt.depth_ms} ms` : ''} · ${dt.frames}장 · 인스턴스 ${(dt.instances || []).length}`],
+        ['최근', (dt.last || []).map(d => `${esc(d.name)} ${d.score}${d.matched != null ? ` → #${d.matched}` : ' (새 마스크 물체)'}`).join('<br>') || '-'],
+        ...(dt.error ? [['오류', `<span style="color:var(--bad)">${esc(dt.error)}</span>`]] : [])]);
+      if(dt && document.activeElement !== q(r, 'k-depth')) q(r, 'k-depth').value = dt.depth_mode || 'off';
+      if(!P.vocabEditing && dt?.vocab_list) q(r, 'k-vocab').value = dt.vocab_list.map(([e, k]) => `${e}=${k}`).join('\n');
+      const b = c.board, f = c.floor;
+      q(r, 'k-board').innerHTML = !b || !b.T ? kv([['상태', '미검출']])
+        : kv([['검출', `${b.source} · 모서리 ${b.corners}개`], ['방식', b.method],
+            ...(b.method === 'LiDAR' ? [['평면 점 / 평면 RMS', `${b.plane_pts} 점 / ${b.plane_rms_mm} mm`], ['모서리 정합 오차', `${b.fit_mm} mm`],
+                                        ['출력 크기', `${b.size_mm} mm (배율 ${b.print_scale}%)`]] : []),
+            ['재투영 오차', `${b.reproj_px} px`], ['거리', `${b.dist_m} m`], ['기울기 (중력 대비)', `${b.tilt_deg}°`]]);
+      const rf = f?.refine;
+      q(r, 'k-floor-note').textContent = f ? `고정 ${f.time} · ${f.n}회 평균 · 편차 ${f.spread_mm} mm` +
+          (rf?.floor_rms_mm !== undefined ? ` · 평면 보정 RMS ${rf.floor_rms_mm} mm` : '') : '';
+      const af = c.auto_floor;
+      q(r, 'k-frame').textContent = `y=0: ${f ? '마커 고정' : b?.T ? '마커 실시간' : af ? `자동 바닥 (점 ${af.pts})` : 'ARKit (바닥 미검출)'}`;
       q(r, 'k-tags').innerHTML = tags.length ? tags.map(([id, t]) => `<div class="mono">ID ${id} · ${t.dist_m.toFixed(3)} m</div>`).join('') : '검출된 태그 없음';
     },
   },
+  grasp: {
+    name: '파지', icon: 'back_hand',
+    init(P){
+      const r = P.root;
+      q(r, 'g-target').addEventListener('change', e => setGizmo(e.target.value, q(r, 'g-mode').value));
+      q(r, 'g-mode').addEventListener('change', e => setGizmo(q(r, 'g-target').value, e.target.value));
+      q(r, 'g-reset').addEventListener('click', () => {
+        const t = q(r, 'g-target').value; if(t === 'none') return;
+        (t === 'robot' ? robotRoot : worldAdj).matrix.identity(); saveRegistration();
+      });
+      q(r, 'g-preview').addEventListener('click', playPreview);
+      q(r, 'g-exec').addEventListener('click', () => {
+        if(confirm('실제 로봇 실행: 접근 → 하강 → 닫기 → 들기\n중단: STOP / Esc')) send({type:'grasp_exec'});
+      });
+      q(r, 'g-cancel').addEventListener('click', () => send({type:'grasp_cancel'}));
+    },
+    render(P){
+      const r = P.root, g = S.grasp || {};
+      const pose = m => { const p = new THREE.Vector3(), qq = new THREE.Quaternion(), sc = new THREE.Vector3(); m.decompose(p, qq, sc);
+        const e = new THREE.Euler().setFromQuaternion(qq, 'YXZ'); return `x ${(p.x*100).toFixed(1)} · y ${(p.y*100).toFixed(1)} · z ${(p.z*100).toFixed(1)} cm · yaw ${THREE.MathUtils.radToDeg(e.y).toFixed(1)}°`; };
+      q(r, 'g-reg').innerHTML = kv([['로봇', pose(robotRoot.matrix)], ['iPhone 월드', pose(worldAdj.matrix)]]);
+      const o = g.object, p = g.plan, ex = g.exec;
+      const rows = [['단계', {idle: '대기', selected: '물체 선택됨', planning: '계획 중…', planned: '계획 완료', executing: '실행 중', done: '완료', disabled: '비활성'}[g.stage] || g.stage]];
+      if(o) rows.push(['물체', `${o.points}점 (${o.source}) · 크기 ${o.size_mm.join('×')} mm`]);
+      if(o?.tsdf) rows.push(['물체 TSDF', o.tsdf.error ? `<span style="color:var(--bad)">${esc(o.tsdf.error)}</span>`
+        : `${o.tsdf.voxel_mm} mm 복셀 · ${o.tsdf.verts.toLocaleString()} 정점 · 키프레임 ${o.tsdf.keyframes} · ${o.tsdf.size_mm?.join('×')} mm · ${o.tsdf.ms} ms`]);
+      if(p && p.surface) rows.push(['표면 / 후보', `${p.surface} · 후보 ${p.candidates} · 충돌 없음 ${p.collision_free_tried} · IK 통과 ${p.ik_ok}`],
+        ['파지', `폭 ${p.width_mm} mm · 롤 ${p.roll_deg}° · gear ${p.gear}`], ['접근 / 들기', `${p.approach_mm} mm / ${p.lift_mm} mm`],
+        ['IK 오차', `${p.ik_err_mm.join(' / ')} mm · ${p.ik_err_deg.join(' / ')}°`], ['계획 시간', `${p.ms} ms`],
+        ...(p.sim ? (p.sim.error ? [['물리 예측', `<span style="color:var(--bad)">${esc(p.sim.error)}</span>`]]
+          : [['물리 예측', `<b style="color:${p.sim.held ? 'var(--ok)' : p.sim.lift_mm > 5 ? 'var(--accent)' : 'var(--bad)'}">${p.sim.verdict}</b>`],
+             ['예측 들림 / 집게 접촉', `${p.sim.lift_mm} / ${p.sim.planned_lift_mm} mm · ${p.sim.jaw_contacts}`],
+             ['최대 집게력 · 추종 오차', `${p.sim.peak_jaw_force_n ?? '-'} N · ${p.sim.max_track_err_deg ?? '-'}°`],
+             ['검증한 후보', (p.sim_tried || []).map(t => `${t.width_mm} mm/${t.roll_deg}° ${t.verdict}`).join('<br>')],
+             ['처음 닿은 곳', (p.sim.segments || []).filter(sg => sg.first_hit).map(sg => `${sg.step}: ${sg.first_hit.body.replace('_v1_1', '')} @TCP ${sg.first_hit.tcp_mm.join(', ')} mm`).join('<br>') || '-'],
+             ['예측 가정', `${esc(p.sim.assumptions)} · ${p.sim.ms} ms`]]) : []));
+      else if(p && p.tried) rows.push(['시도', p.tried.map(t => `${t.surface} 후보 ${t.candidates}${t.collision_free !== undefined ? ` · 충돌없음 ${t.collision_free} · IK ${t.ik_ok}` : ''}`).join(' / ')]);
+      if(ex) rows.push(['실행', ex.step ? `${ex.step}/${ex.of} ${ex.label} (${ex.duration_s}s)` : ex.label]);
+      if(g.error) rows.push(['오류', `<span style="color:var(--bad)">${esc(g.error)}</span>`]);
+      q(r, 'g-state').innerHTML = kv(rows);
+      q(r, 'g-preview').disabled = q(r, 'g-exec').disabled = !(p && p.q_grasp) || g.stage === 'executing';
+    },
+  },
 };
-const PANEL_ORDER = ['sys', 'motor', 'calib', 'log', 'ctrl', 'cam'];
+const PANEL_ORDER = ['sys', 'motor', 'calib', 'log', 'ctrl', 'cam', 'grasp'];
 
 function drawSpark(canvas){
   const h = hist[sel], dpr = devicePixelRatio, W = canvas.clientWidth * dpr, H = canvas.clientHeight * dpr;
@@ -638,15 +1129,19 @@ function calibBars(){
 
 // ---------------------------------------------------------------- header
 function renderHeader(){
+  $('#clients').textContent = S.clients ?? 1;
+  $('#clients-chip').style.display = S.clients > 1 ? '' : 'none';
   $('#conn').className = 'dot ' + (S.connected ? 'on' : 'off');
+  $('#link-ic').textContent = !S.connected ? 'usb_off' : S.robot_source === 'virtual' ? 'smart_toy' : 'usb';
   $('#port').textContent = S.connected ? (S.port || '').replace('/dev/cu.', '') : (S.error || '연결 끊김');
   const ms = Object.values(S.motors || {}).filter(m => m.online);
-  $('#busv').textContent = ms.length ? `${(ms.reduce((s, m) => s + m.voltage, 0) / ms.length).toFixed(1)} V · 최고 ${Math.max(...ms.map(m => m.temp))}°C` : '';
+  $('#volt-chip').style.display = $('#temp-chip').style.display = ms.length ? '' : 'none';
+  if(ms.length){ $('#volt').textContent = `${(ms.reduce((s, m) => s + m.voltage, 0) / ms.length).toFixed(1)} V`; $('#temp').textContent = `${Math.max(...ms.map(m => m.temp))}°C`; }
 }
 $('#all-on').addEventListener('click', () => send({type:'torque', id:'all', on:true}));
 $('#all-off').addEventListener('click', () => send({type:'torque', id:'all', on:false}));
 $('#estop').addEventListener('click', () => send({type:'estop'}));
-window.addEventListener('keydown', e => { if(e.key === 'Escape') send({type:'estop'}); });
+window.addEventListener('keydown', e => { if(e.key === 'Escape') send({type:'estop'}); });   // gizmo keys: see setGizmo
 $('#cam-reset').addEventListener('click', resetCam);
 
 // ---------------------------------------------------------------- docks (right sidebar / bottom bar)
@@ -655,7 +1150,8 @@ const DOCK_NAMES = {right:'오른쪽', bottom:'하단'};
 const DEFAULT_LAYOUT = {right:['motor', 'calib', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'motor', bottom:'ctrl'}};
 let layout = structuredClone(DEFAULT_LAYOUT);
 try { const l = JSON.parse(localStorage.getItem('elrobot.layout')); if(l?.right && l?.bottom && l?.active) layout = l; } catch {}
-if(!layout.right.includes('cam') && !layout.bottom.includes('cam')) layout.right.push('cam');  // panel added after layouts were saved
+for(const id of ['cam', 'grasp'])   // panels added after layouts were saved
+  if(!layout.right.includes(id) && !layout.bottom.includes(id)) layout.right.push(id);
 const dockEl = d => document.querySelector(`.dock[data-dock="${d}"]`);
 const inst = {right:{}, bottom:{}};  // dock -> panel id -> {root, ...render cache}
 function saveLayout(){ try { localStorage.setItem('elrobot.layout', JSON.stringify(layout)); } catch {} }
@@ -671,11 +1167,11 @@ function renderDocks(){
   for(const d of DOCKS){
     const el = dockEl(d), body = el.querySelector('.dock-body'), ids = layout[d];
     if(!ids.includes(layout.active[d])) layout.active[d] = ids[0] ?? null;
-    el.querySelector('.tablist').innerHTML = ids.map(id => `<button class="tab ${id === layout.active[d] ? 'on' : ''}" data-p="${id}">${PANEL_DEFS[id].name}</button>`).join('');
+    el.querySelector('.tablist').innerHTML = ids.map(id => `<button class="tab ${id === layout.active[d] ? 'on' : ''}" data-p="${id}" title="${PANEL_DEFS[id].name}"><span class="ic">${PANEL_DEFS[id].icon}</span><span class="tn">${PANEL_DEFS[id].name}</span></button>`).join('');
     for(const id of Object.keys(inst[d])) if(!ids.includes(id)){ inst[d][id].root.remove(); delete inst[d][id]; }
     body.querySelector('.empty')?.remove();
     for(const id of ids){ const P = getInst(d, id); body.appendChild(P.root); P.root.classList.toggle('on', id === layout.active[d]); }
-    if(!ids.length) body.insertAdjacentHTML('beforeend', '<div class="empty">+ 버튼으로 패널을 추가하세요</div>');
+    if(!ids.length) body.insertAdjacentHTML('beforeend', '<div class="empty"><span class="ic" style="font-size:28px">add_circle</span></div>');
   }
   // an empty bottom bar shrinks to its tab strip
   document.documentElement.style.setProperty('--bottom-h', layout.bottom.length ? '220px' : '41px');
@@ -691,7 +1187,7 @@ function renderPanels(only){
 function renderMenu(d){
   const other = d === 'right' ? 'bottom' : 'right';
   dockEl(d).querySelector('.menu').innerHTML = `<div class="mh">${DOCK_NAMES[d]}에 표시할 패널</div>` + PANEL_ORDER.map(id => `
-    <label><input type="checkbox" data-p="${id}" ${layout[d].includes(id) ? 'checked' : ''}>${PANEL_DEFS[id].name}
+    <label><input type="checkbox" data-p="${id}" ${layout[d].includes(id) ? 'checked' : ''}><span class="ic" style="color:var(--ink3)">${PANEL_DEFS[id].icon}</span>${PANEL_DEFS[id].name}
       ${layout[other].includes(id) ? `<span class="where">${DOCK_NAMES[other]}에도 있음</span>` : ''}</label>`).join('');
 }
 function closeMenus(){
@@ -701,7 +1197,7 @@ function closeMenus(){
 for(const d of DOCKS){
   const el = dockEl(d), menu = el.querySelector('.menu'), plus = el.querySelector('.plus');
   el.querySelector('.tablist').addEventListener('click', e => {
-    const id = e.target.dataset.p; if(!id) return;
+    const id = e.target.closest('[data-p]')?.dataset.p; if(!id) return;
     layout.active[d] = id; renderDocks();
   });
   plus.addEventListener('click', e => {
@@ -722,8 +1218,27 @@ document.addEventListener('click', closeMenus);
 renderDocks();
 function toast(t){ const el = $('#toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', 2500); }
 
+// Express the iPhone world in the floor frame: scene = floor, so world.matrix = inverse(T_world_floor)
+let floorKey = null, floorMode = 'world';
+function applyFloor(){
+  const c = S?.camera || {}, af = c.auto_floor;
+  // priority: locked marker floor > live marker > automatic (gravity + lowest horizontal surface) > raw ARKit
+  let T = c.floor?.T || c.board?.T || null;
+  if(!T && af) T = [[1, 0, 0, 0], [0, 1, 0, af.y], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const key = T ? JSON.stringify(T) : null;
+  if(key === floorKey) return;
+  floorKey = key;
+  const mode = c.floor?.T ? 'locked' : c.board?.T ? 'live' : af ? 'auto' : 'world';
+  if(mode !== floorMode){ floorMode = mode; camInfo.fitted = false; }  // re-fit only when the frame type changes
+  world.matrixAutoUpdate = false;
+  if(T){ const m = new THREE.Matrix4().set(...T.flat()); world.matrix.copy(m.invert()); }
+  else world.matrix.identity();
+  world.matrixWorldNeedsUpdate = true;
+}
 function render(){
-  renderHeader(); renderList(); updateRobot(); paintRobot(); renderPanels();
+  renderHeader(); renderList(); updateRobot(); paintRobot(); applyFloor(); renderGrasp(); renderPanels(); renderPipeline(); renderHier(); loadTracks(); loadFloorPhoto();
+  const rv = S?.camera?.recon?.version;
+  if(rv !== undefined && rv !== reconVersion && !reconLoading){ reconVersion = rv; loadReconMesh(); }
 }
 
 // ---------------------------------------------------------------- websocket
@@ -747,6 +1262,102 @@ function connect(){
 connect();
 select(1);
 
+// ---------------------------------------------------------------- settings → pipeline (live I/O per stage)
+const TAG = {taco: '<span class="tag taco"><span class="ic" style="font-size:13px">description</span>TACO</span>',
+             ours: '<span class="tag ours"><span class="ic" style="font-size:13px">build</span>추가한 층</span>',
+             ext: '<span class="tag ext"><span class="ic" style="font-size:13px">extension</span>외부</span>'};
+// node-edge graph: [id, column, row, icon]; edges carry the data that flows (short I/O label)
+const PIPE_NODES = [
+  ['cam', 0, 0, 'photo_camera'], ['cloud', 1, 0, 'scatter_plot'], ['floor', 2, 0, 'grid_on'], ['reg', 3, 0, 'open_with'],
+  ['tsdf', 1, 1, 'view_in_ar'], ['split', 2, 1, 'category'], ['seg', 3, 1, 'ads_click'], ['cand', 4, 1, 'back_hand'], ['ik', 5, 1, 'route'],
+  ['bus', 0, 2, 'cable'], ['detect', 1, 2, 'image_search'], ['exec', 4, 2, 'play_circle'], ['sim', 5, 2, 'science'],
+];
+const PIPE_EDGES = [
+  ['cam', 'cloud', '깊이'], ['cloud', 'floor', 'N×3'], ['floor', 'reg', 'T'], ['cam', 'tsdf', '키프레임'],
+  ['tsdf', 'split', '메시'], ['floor', 'split', '바닥 y'], ['cam', 'detect', 'RGB'], ['detect', 'split', '종류'], ['split', 'seg', '클릭'], ['reg', 'seg', '4×4'],
+  ['seg', 'cand', '점'], ['cand', 'ik', 'TCP'], ['ik', 'sim', '경유점'], ['sim', 'exec', '계획'], ['exec', 'bus', 'goal ×8'],
+];
+const PG = {nw: 126, nh: 74, gx: 170, gy: 112, pad: 18};
+function pipelineStages(){
+  const c = S?.camera || {}, rc = c.recon || {}, g = S?.grasp || {}, p = g.plan || {}, o = g.object, af = c.auto_floor, f = c.floor;
+  const n = v => (v ?? 0).toLocaleString(), off = t => `<span class="off">${t}</span>`;
+  return {
+    bus: {nm: '로봇 버스', tag: 'ours', io: 'ST3215 ×8 (1 Mbps) → 위치·속도·부하·전류·전압·온도 ≈25 Hz · raw ↔ 관절각 (캘리브레이션 + URDF 한계)', impl: 'server.py Bus · virtual.py VirtualBus',
+      live: S?.connected ? `${esc(S.port)} · ${Object.values(S.motors || {}).filter(m => m.online).length}/8` : off(esc(S?.error || '연결 안 됨'))},
+    cam: {nm: '카메라', tag: 'ext', io: 'iPhone LiDAR → RGB 1920×1440 · 깊이 256×192 f32 m · 신뢰도 · K 3×3 · T_world_cam 4×4', impl: `Record3DStream SDK (USB/WiFi) · 가상 카메라 · 연결 ${c.link || '-'}`,
+      live: c.connected ? `${c.fps} fps · ${c.link}` : off('수신 없음')},
+    cloud: {nm: '점군', tag: 'ours', io: '깊이 2칸 간격 + 신뢰도 ≥ 중간 → N×3 f32 m (ARKit 세계) + 색 · 10 Hz', impl: 'camera/stream.py _process', live: c.points ? `${n(c.points)} 점` : off('-')},
+    floor: {nm: '바닥', tag: 'ours', io: '중력(ARKit y) + 높이 히스토그램 최저 봉우리 → 바닥 y=0 · 마커 → 원점·방향 (LiDAR 평면 + Umeyama)', impl: 'stream.py _update_auto_floor · _floor_pose · _refine_floor',
+      live: f ? `마커 고정 · ${f.spread_mm} mm` : af ? `자동 · y ${af.y} m` : off('미검출')},
+    reg: {nm: '로봇 ↔ 월드', tag: 'ours', io: '기즈모 → M_scene_base, M_scene_world (4×4, 서버 저장·공유)', impl: 'index.html TransformControls · registration.json', live: '기즈모'},
+    tsdf: {nm: '복원 TSDF', tag: 'ext', io: '키프레임 (6 cm/6°, 같은 시점 4 cm/4° 교체) → TSDF 1 cm → 메시 · 최신 관측 2장 기준 유령 제거', impl: 'Open3D VoxelBlockGrid · camera/recon.py (키프레임·제거 규칙 = 추가한 층)',
+      live: rc.running ? `KF ${rc.keyframes} · ${n(rc.verts)} 정점 · ${rc.integrate_ms}+${rc.extract_ms} ms` : off('정지')},
+    detect: {nm: '물체 인식', tag: 'ext', io: '키프레임 RGB (약 1 Hz) → YOLOE 분할 마스크 + 종류 (어휘: 글자 지정, 편집 가능) → 마스크 픽셀 + 깊이 → 3D 점 → 기하 물체와 겹침 F1로 연결 → 종류 투표 누적 (감쇠 0.9) · 연결 안 되면 마스크 물체로 추적',
+      impl: 'camera/detect.py · YOLOE (THU-MIG, Ultralytics, AGPL-3.0) · 연결·추적은 ConceptGraphs / Open-Fusion 방식 (추가한 층)',
+      live: c.detect?.running ? `${c.detect.ms} ms · ${(c.detect.last || []).length}개 · 마스크 물체 ${(c.detect.tracks || []).length}` : off('정지')},
+    split: {nm: '물체 분리', tag: 'ours', io: '바닥 +8 mm 위 메시 → 연결 성분 → 물체 크기(≤45 cm 폭, ≤45 cm 높이, 바닥에 닿음) → 덩어리마다 TSDF 3 mm → 그 안의 넓은 윗면(도마 등)을 받침면으로 보고 그 위 물체 분리 → 안 본 면 완성 (상자 / 원통 / 높이맵, 오차 ≤3.5 mm) · 배경에서 제거 · 바닥 빈칸·물체 밑 평면 채움', impl: 'camera/recon.py _split_objects · object_tsdf · camera/complete.py',
+      live: (rc.objects || []).length ? `${rc.objects.length}개 · ${rc.split_ms} ms` : off(af || f ? '없음' : '바닥 필요')},
+    seg: {nm: '물체 선택', tag: 'ours', io: '클릭 + 원본 깊이 점 (키프레임 12장, 4 mm 평균) → 받침면 + 영역 확장 → 물체 점 · 물체 TSDF 3 mm', impl: 'grasp/planner.py segment_object · recon.object_tsdf',
+      live: o ? `${o.points} 점 · ${o.size_mm.join('×')} mm` : off('선택 없음')},
+    cand: {nm: '파지 후보', tag: 'taco', io: '닫힌 표면 (볼록 껍질 + 받침면까지) → 마주보는 접촉쌍 → TCP 프레임 × 롤 → 그리퍼 껍질 충돌 제외', impl: 'taco_tools/grasp_transfer.py sample_antipodal · place_gripper · hull_hits (그대로) · 순위 기준점 = 부피 중심 (추가)',
+      live: p.candidates !== undefined ? `후보 ${p.candidates} · 충돌없음 ${p.collision_free_tried}` : p.tried ? p.tried.map(t => `후보 ${t.candidates}`).join(' / ') : off('-')},
+    ik: {nm: '경로 · IK', tag: 'ours', io: 'TCP 프레임 → 접근 검사 (10→7→5→3 cm) → 5 mm마다 IK 연속해 (중간점 직선 이탈 ≤ 3 mm) → 하강·상승·들기 경유점', impl: 'TACO approach_clear 규칙 재구현 · line_path · sweep_clear · pick_demo.solve_ik (그대로)',
+      live: p.ik_err_mm ? `접근 ${p.approach_mm} · 경유점 ${p.q_descend?.length ?? 2}+${p.q_rise?.length ?? 2}` : off('-')},
+    sim: {nm: '물리 예측', tag: 'ours', io: '실행과 같은 시간표 + 물체 껍질 (0.1 kg, μ 1) + 받침면 · 관절 = 힘 제한 위치 서보 (토크 상한 반영) → 물체·관절 궤적 20 Hz, 집게력 → 판정 · 후보 ≤3개 검증', impl: 'grasp/sim.py · grasp/motion.py · MuJoCo · TACO 물리 설정 (elliptic, noslip 10, impratio 10, 집게 μ 2)',
+      live: p.sim?.verdict ? `${p.sim.verdict} · ${p.sim.lift_mm} mm · ${p.sim.peak_jaw_force_n ?? '-'} N` : off('-')},
+    exec: {nm: '실행', tag: 'ours', io: '경유점 경로 (0.4 rad/s, smoothstep, 20 Hz) → 서보 목표 raw ×8 · 집게는 닫힘 명령 + 토크 상한으로 힘 제한', impl: 'grasp/manager.py _run → goal_many · 시간표 grasp/motion.py (시뮬과 공유)',
+      live: g.exec ? (g.exec.step ? `${g.exec.step}/${g.exec.of} ${g.exec.label}` : g.exec.label) : off('대기')},
+  };
+}
+const pos = id => { const nd = PIPE_NODES.find(x => x[0] === id); return {x: PG.pad + nd[1] * PG.gx, y: PG.pad + nd[2] * PG.gy}; };
+function edgePath(a, b){
+  const A = pos(a), B = pos(b), {nw, nh} = PG;
+  let x1, y1, x2, y2, d;
+  if(B.x > A.x){ x1 = A.x + nw; y1 = A.y + nh / 2; x2 = B.x - 4; y2 = B.y + nh / 2; const k = (x2 - x1) / 2; d = `M${x1},${y1} C${x1 + k},${y1} ${x2 - k},${y2} ${x2},${y2}`; }
+  else if(B.x < A.x && B.y === A.y){ x1 = A.x + nw / 2; y1 = A.y + nh; x2 = B.x + nw / 2; y2 = B.y + nh + 4; d = `M${x1},${y1} C${x1},${y1 + 46} ${x2},${y2 + 42} ${x2},${y2}`; return {d, mx: (x1 + x2) / 2, my: y1 + 38}; }
+  else if(B.x < A.x){ x1 = A.x; y1 = A.y + nh / 2; x2 = B.x + nw + 4; y2 = B.y + nh / 2; const k = (x1 - x2) / 2; d = `M${x1},${y1} C${x1 - k},${y1} ${x2 + k},${y2} ${x2},${y2}`; }
+  else { x1 = A.x + nw / 2; y1 = B.y > A.y ? A.y + nh : A.y; x2 = x1; y2 = B.y > A.y ? B.y - 4 : B.y + nh + 4; d = `M${x1},${y1} L${x2},${y2}`; }
+  return {d, mx: (x1 + x2) / 2, my: (y1 + y2) / 2};
+}
+let pgSel = null;
+function buildPipeline(){
+  const st = pipelineStages(), cols = Math.max(...PIPE_NODES.map(x => x[1])) + 1, rows = Math.max(...PIPE_NODES.map(x => x[2])) + 1;
+  const W = PG.pad * 2 + (cols - 1) * PG.gx + PG.nw, Hh = PG.pad * 2 + (rows - 1) * PG.gy + PG.nh + 48;
+  const edges = PIPE_EDGES.map(([a, b, l]) => { const e = edgePath(a, b);
+    return `<path data-e="${a}" d="${e.d}" marker-end="url(#pg-arrow)"/><text x="${e.mx}" y="${e.my - 5}">${l}</text>`; }).join('');
+  const nodes = PIPE_NODES.map(([id, , , ic]) => { const P = pos(id);
+    return `<div class="pn t-${st[id].tag}" data-n="${id}" style="left:${P.x}px;top:${P.y}px;width:${PG.nw}px;height:${PG.nh}px">
+      <span class="st"></span><div class="pn-h"><span class="ic">${ic}</span>${st[id].nm}</div><div class="pn-live" data-live="${id}"></div></div>`; }).join('');
+  $('#pipeline').innerHTML = `<div class="pg-legend">${TAG.taco}${TAG.ours}${TAG.ext}</div>
+    <div class="pg" style="width:${W}px;height:${Hh}px">
+      <svg class="pg-edges" width="${W}" height="${Hh}"><defs><marker id="pg-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#adb5bd" stroke="none"/></marker></defs>${edges}</svg>
+      ${nodes}</div>
+    <div class="pg-detail" id="pg-detail"></div>`;
+  $('#pipeline').querySelector('.pg').addEventListener('click', e => { const id = e.target.closest('[data-n]')?.dataset.n; if(id){ pgSel = id; renderPipeline(); } });
+}
+function renderPipeline(){
+  if(!$('#settings').classList.contains('show') || !S) return;
+  if(!$('#pipeline .pg')) buildPipeline();
+  const st = pipelineStages(), on = {};
+  for(const [id] of PIPE_NODES){
+    const el = $(`#pipeline [data-n="${id}"]`);
+    on[id] = !st[id].live.includes('class="off"');
+    el.classList.toggle('on', on[id]); el.classList.toggle('sel', id === pgSel);
+    const lv = el.querySelector('.pn-live'); if(lv.innerHTML !== st[id].live) lv.innerHTML = st[id].live;
+  }
+  for(const ph of document.querySelectorAll('#pipeline path[data-e]')) ph.classList.toggle('on', !!on[ph.dataset.e]);
+  const d = pgSel && st[pgSel], ic = pgSel && PIPE_NODES.find(x => x[0] === pgSel)[3];
+  const html = d ? `<div class="h"><span class="ic">${ic}</span>${d.nm}${TAG[d.tag]}</div>
+      <div class="row"><span class="ic">swap_horiz</span><span>${d.io}</span></div>
+      <div class="row"><span class="ic">code</span><span>${d.impl}</span></div>
+      <div class="row"><span class="ic">monitoring</span><span>${d.live}</span></div>`
+    : `<div class="row"><span class="ic">touch_app</span><span>노드를 누르면 입력 → 출력 · 구현 위치</span></div>`;
+  const det = $('#pg-detail'); if(det.innerHTML !== html) det.innerHTML = html;
+}
+$('#settings-btn').addEventListener('click', () => { $('#settings').classList.add('show'); renderPipeline(); });
+$('#settings-close').addEventListener('click', () => $('#settings').classList.remove('show'));
+$('#settings').addEventListener('click', e => { if(e.target.id === 'settings') $('#settings').classList.remove('show'); });
+
 // ---------------------------------------------------------------- iPhone point cloud stream
 function connectCam(){
   const cws = new WebSocket(`ws://${location.host}/ws_cam`);
@@ -767,8 +1378,18 @@ function connectCam(){
 }
 function fitCloud(){
   const n = cloudGeom.drawRange.count; if(!n) return;
-  cloudGeom.computeBoundingSphere();
-  const sph = cloudGeom.boundingSphere.clone().applyMatrix4(world.matrixWorld);
+  // robust bounds: 10–90 % per axis of the points within 0.8 m of the robot base (the far floor would push the view out)
+  scene.updateMatrixWorld(true);                     // the floor transform may have been set since the last frame
+  const P = cloudGeom.attributes.position.array, step = Math.max(1, Math.floor(n / 4000)), ax = [[], [], []], q = new THREE.Vector3();
+  for(let i = 0; i < n; i += step){
+    q.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]).applyMatrix4(world.matrixWorld);
+    if(Math.hypot(q.x, q.z) < 0.8){ ax[0].push(q.x); ax[1].push(q.y); ax[2].push(q.z); }
+  }
+  if(ax[0].length < 50) return resetCam();
+  const pc = (a, f) => a.sort((x, y) => x - y)[Math.floor(f * (a.length - 1))];
+  const box = new THREE.Box3(new THREE.Vector3(...ax.map(a => pc(a, .1))), new THREE.Vector3(...ax.map(a => pc(a, .9))));
+  if(robot) box.union(new THREE.Box3().setFromObject(robot));
+  const sph = box.getBoundingSphere(new THREE.Sphere());
   const d = sph.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
   camera.position.copy(sph.center).add(new THREE.Vector3(0.62, 0.42, 0.66).normalize().multiplyScalar(d));
   controls.target.copy(sph.center); controls.update();
@@ -780,6 +1401,389 @@ function viewFromPhone(){
   camera.position.copy(p); controls.target.copy(p.clone().add(fwd.multiplyScalar(0.5))); controls.update();
 }
 connectCam();
+// test hook: lets automated checks project a 3D point to the screen (read-only handles)
+window.__viewer = {THREE, camera, world, renderer, robot: () => robot, ghostRobot: () => ghostRobot, reconMesh, reconObjs, cloud};
+
+// ---------------------------------------------------------------- registration gizmo (robot / iPhone world)
+const gizmo = new TransformControls(camera, renderer.domElement);
+gizmo.setSize(0.8);
+scene.add(gizmo);
+let gizmoKind = 'none';            // 'robot' | 'world' → registration (saved, shared) · 'object' → place target (sim)
+gizmo.addEventListener('dragging-changed', e => { controls.enabled = !e.value; if(!e.value && gizmoKind !== 'object') saveRegistration(); });
+const gizmoProxy = new THREE.Object3D(); scene.add(gizmoProxy);   // TransformControls drives a proxy; we copy into the parent matrix
+let gizmoTarget = null;
+gizmo.addEventListener('objectChange', () => {
+  if(!gizmoTarget) return;
+  gizmoProxy.updateMatrix(); gizmoTarget.matrix.copy(gizmoProxy.matrix); gizmoTarget.matrixWorldNeedsUpdate = true;
+});
+let gizmoMode = 'translate';
+function setGizmo(target, mode){
+  gizmo.detach(); gizmoTarget = null; gizmoKind = target;
+  if(mode) gizmoMode = mode;
+  gizmo.setSpace('world'); gizmo.showX = gizmo.showY = gizmo.showZ = true;
+  if(target !== 'object' && placeTgt.pivot && !placeTgt.moved()) clearPlaceTarget();
+  renderGzbar();
+  if(target === 'none') return;
+  if(target === 'object'){ attachObjectGizmo(); return; }
+  gizmoTarget = target === 'robot' ? robotRoot : worldAdj;
+  gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
+  gizmo.setMode(gizmoMode); gizmo.attach(gizmoProxy);
+}
+// ---- [ours] object place target: the clicked object's completed mesh as a semi-transparent copy the gizmo moves
+// along the floor / turns about the vertical; '옮기기 실행' asks the robot to make it real (grasp_place)
+const TGT_MAT = new THREE.MeshStandardMaterial({color: 0x1c7ed6, transparent: true, opacity: 0.38, depthWrite: false, roughness: .6});
+const placeTgt = {pivot: null, objId: null, c: null, sent: false,
+  moved(){ const p = this.pivot; return !!p && (p.position.distanceTo(this.c) > 0.002 || Math.abs(p.rotation.y) > 0.01); }};
+function clearPlaceTarget(){
+  const p = placeTgt.pivot; if(!p) return;
+  if(gizmo.object === p) gizmo.detach();
+  p.parent?.remove(p); p.traverse(x => x.geometry?.type === 'EdgesGeometry' && x.geometry.dispose());
+  Object.assign(placeTgt, {pivot: null, objId: null, c: null, sent: false});
+  renderPlacebar();
+}
+function makePlaceTarget(m){
+  clearPlaceTarget();
+  const g = m.userData.full; g.computeBoundingBox();
+  const c = g.boundingBox.getCenter(new THREE.Vector3());
+  const pivot = new THREE.Object3D(); pivot.position.copy(c); pivot.rotation.order = 'YXZ'; world.add(pivot);
+  const gm = new THREE.Mesh(g, TGT_MAT); gm.position.copy(c).negate(); gm.userData.overlay = true; gm.renderOrder = 3; gm.raycast = () => {};
+  gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 50), new THREE.LineBasicMaterial({color: 0x1c7ed6, transparent: true, opacity: .8})));
+  pivot.add(gm); pivot.visible = false;
+  Object.assign(placeTgt, {pivot, objId: m.userData.objId, c: c.clone(), sent: false});
+}
+function attachObjectGizmo(){
+  const p = placeTgt.pivot; if(!p) return;
+  gizmo.setMode(gizmoMode); gizmo.setSpace('local');
+  // on the support: move in its plane, turn about the vertical (the planner keeps the grasp top-down)
+  if(gizmoMode === 'translate'){ gizmo.showX = gizmo.showZ = true; gizmo.showY = false; }
+  else { gizmo.showX = gizmo.showZ = false; gizmo.showY = true; }
+  gizmo.attach(p);
+}
+gizmo.addEventListener('objectChange', () => {
+  if(gizmoKind !== 'object' || !placeTgt.pivot) return;
+  const p = placeTgt.pivot; p.rotation.x = p.rotation.z = 0; p.position.y = placeTgt.c.y;
+  p.visible = placeTgt.moved(); placeTgt.sent = false; renderPlacebar();
+});
+function placeDelta(){            // D (ARKit world): target = D · current;  D = T(c + t) · R_y · T(−c)
+  const p = placeTgt.pivot; p.updateMatrix();
+  return p.matrix.clone().multiply(new THREE.Matrix4().makeTranslation(-placeTgt.c.x, -placeTgt.c.y, -placeTgt.c.z));
+}
+const gzbar = $('#gzbar'), placebar = $('#placebar');
+function renderGzbar(){
+  gzbar.classList.toggle('show', gizmoKind !== 'none');
+  const o = gizmoKind === 'object' ? objInfo(placeTgt.objId) : null;
+  gzbar.querySelector('[data-z="kind"]').textContent = {robot: '로봇 위치 (정합)', world: '월드 위치 (정합)', object: `${o?.label ? o.label.name : '물체'} #${placeTgt.objId ?? ''} 목표`}[gizmoKind] || '';
+  gzbar.querySelector('[data-z="icon"]').textContent = {robot: 'precision_manufacturing', world: 'public', object: 'deployed_code'}[gizmoKind] || 'open_with';
+  gzbar.querySelectorAll('[data-z="translate"],[data-z="rotate"]').forEach(b => b.classList.toggle('on', b.dataset.z === gizmoMode));
+}
+function renderPlacebar(){
+  const show = !!placeTgt.pivot && placeTgt.moved();
+  placebar.classList.toggle('show', show);
+  if(!show) return;
+  const p = placeTgt.pivot, o = objInfo(placeTgt.objId), d = p.position.clone().sub(placeTgt.c);
+  placebar.querySelector('[data-p="name"]').textContent = `${o?.label ? o.label.name : '물체'} #${placeTgt.objId}`;
+  placebar.querySelector('[data-p="d"]').textContent = `Δx ${(d.x * 100).toFixed(1)} · Δz ${(d.z * 100).toFixed(1)} cm · ${THREE.MathUtils.radToDeg(p.rotation.y).toFixed(0)}°`;
+  const go = placebar.querySelector('[data-p="go"]'); go.disabled = placeTgt.sent;
+}
+gzbar.addEventListener('click', e => {
+  const z = e.target.closest('[data-z]')?.dataset.z;
+  if(z === 'translate' || z === 'rotate') setGizmo(gizmoKind, z);
+  else if(z === 'close') setGizmo('none');
+});
+placebar.addEventListener('click', e => {
+  const k = e.target.closest('[data-p]')?.dataset.p;
+  if(k === 'cancel'){ clearPlaceTarget(); if(gizmoKind === 'object') setGizmo('none'); }
+  else if(k === 'go') sendPlace();
+});
+function sendPlace(){
+  if(!placeTgt.pivot || !robot) return;
+  if(!Object.values(S?.ram || {}).every(r => r.torque)){ toast('토크가 꺼진 모터가 있습니다 — 왼쪽 위 ON'); return; }
+  world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
+  send({type: 'grasp_place', p_world: placeTgt.c.toArray(), obj_id: placeTgt.objId, D_world: rowMajor(placeDelta()),
+        M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)});
+  placeTgt.sent = true; renderPlacebar();
+  toast('옮기기: 파지 + 놓기 계획 → 물리 예측 → 실행 (중단: STOP / Esc)');
+}
+let placeStage = null;
+function watchPlace(g){                     // target done (or failed): the ghost goes, the tracked object is the truth
+  if(!placeTgt.sent) { placeStage = g.stage; return; }
+  if(g.stage !== placeStage){
+    if(g.stage === 'done'){ setTimeout(() => { clearPlaceTarget(); if(gizmoKind === 'object') setGizmo('none'); }, 1500); }
+    else if((g.stage === 'selected' || g.stage === 'planned' || g.stage === 'idle') && g.error){ toast(g.error); placeTgt.sent = false; renderPlacebar(); }
+    placeStage = g.stage;
+  }
+}
+window.addEventListener('keydown', e => {
+  if(e.target.closest?.('input,textarea,select') || e.metaKey || e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if(gizmoKind !== 'none' && (k === 'w' || k === 'e')) setGizmo(gizmoKind, k === 'w' ? 'translate' : 'rotate');
+  else if(k === 'q') setGizmo('none');
+  else if(k === 'enter' && placeTgt.pivot && placeTgt.moved() && !placeTgt.sent) sendPlace();
+  if(e.key === 'Escape'){ setGizmo('none'); }
+});
+const rowMajor = m => m.clone().transpose().toArray();
+function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix)}); }
+let regKey = null;
+function loadRegistration(){   // shared: follows the server, so a change by another user shows up here
+  const reg = S?.grasp?.registration; if(!reg || gizmo.dragging) return;
+  const key = JSON.stringify(reg); if(key === regKey) return;
+  regKey = key;
+  robotRoot.matrix.fromArray(reg.robot).transpose(); worldAdj.matrix.fromArray(reg.world).transpose();
+  robotRoot.matrixWorldNeedsUpdate = worldAdj.matrixWorldNeedsUpdate = true;
+  if(gizmoTarget) gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
+}
+
+// ---------------------------------------------------------------- scene interaction: hover, click = select, right-click = 집기
+const raycaster = new THREE.Raycaster();
+raycaster.params.Points.threshold = 0.01;
+const tip = $('#tip');
+let down = null, hovered = null;
+function rayHit(e, objectsOnly){
+  const rect = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), camera);
+  const objs = reconObjs.visible ? reconObjs.children : [];
+  const targets = objectsOnly ? objs : [...objs, reconMesh.visible && reconMesh.geometry.index ? reconMesh : null, cloud.visible ? cloud : null].filter(Boolean);
+  return raycaster.intersectObjects(targets, false)[0];
+}
+function clickMsg(type, pointScene){
+  world.updateMatrixWorld(true); robot?.updateMatrixWorld(true);
+  const pWorld = pointScene.clone().applyMatrix4(world.matrixWorld.clone().invert());
+  return {type, p_world: pWorld.toArray(), M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)};
+}
+const objInfo = id => (S?.camera?.recon?.objects || []).find(o => o.id === id);
+const shapeText = o => !o.shape ? `${o.size_mm.join('×')} mm` : o.shape === 'ai' ? `AI 모델 ${o.dims_mm.join('×')} mm` : o.shape === 'box' ? `상자 ${o.dims_mm.join('×')} mm` : o.shape === 'cylinder' ? `원통 Ø${o.dims_mm[0]}×${o.dims_mm[1]} mm` : `높이맵 ${o.dims_mm.join('×')} mm`;
+function setHover(mesh){
+  if(hovered === mesh) return;
+  if(hovered?.material) hovered.material.emissive?.setHex(baseEmissive(hovered));
+  hovered = mesh;
+  if(mesh) mesh.material.emissive.setHex(mesh.userData.objId === selObjId ? 0x8a3a00 : 0x3a2a10);
+  renderer.domElement.classList.toggle('hover', !!mesh);
+  document.querySelectorAll('#hier-list .it[data-obj]').forEach(el => el.classList.toggle('hov', +el.dataset.obj === mesh?.userData.objId));
+}
+function pick(pointScene, label, objId){
+  if(!robot) return;
+  if(!Object.values(S?.ram || {}).every(r => r.torque)){ toast('토크가 꺼진 모터가 있습니다 — 왼쪽 위 ON'); return; }
+  send({...clickMsg('grasp_pick', pointScene), ...(objId ? {obj_id: objId} : {})});
+  toast(`${label} 집기 — 계획 → 물리 예측 → 실행 (중단: STOP / Esc)`);
+}
+let hoverT = 0;
+renderer.domElement.addEventListener('pointermove', e => {
+  if(e.buttons || performance.now() - hoverT < 30) { if(e.buttons) tip.style.display = 'none'; return; }
+  hoverT = performance.now();
+  const h = rayHit(e, true), m = h?.object || null;
+  setHover(m);
+  const o = m && objInfo(m.userData.objId);
+  if(o){
+    tip.innerHTML = `<span class="ic">deployed_code</span> ${o.label ? esc(o.label.name) : '물체'} #${o.id} · ${shapeText(o)}${o.rms_mm != null ? ` (오차 ${o.rms_mm} mm)` : ''} · <span class="ic">mouse</span> 우클릭 집기`;
+    tip.style.left = `${e.clientX + 14}px`; tip.style.top = `${e.clientY + 14}px`; tip.style.display = 'block';
+  } else tip.style.display = 'none';
+});
+renderer.domElement.addEventListener('pointerleave', () => { setHover(null); tip.style.display = 'none'; });
+renderer.domElement.addEventListener('pointerdown', e => { down = {x: e.clientX, y: e.clientY, b: e.button}; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if(!down || down.b !== e.button || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || gizmo.dragging) return;
+  if(e.button === 0){                     // click: object → select + place-target gizmo · robot / world → registration gizmo
+    if(gizmo.axis) return;                  // on the gizmo's own handles
+    const h = rayHit(e, false), oid = h?.object?.userData.objId;
+    const shown = o => { for(let x = o; x; x = x.parent) if(!x.visible) return false; return true; };
+    const rr = robot ? raycaster.intersectObject(robot, true).find(i => i.object.isMesh && !i.object.userData.overlay && shown(i.object)) : null;  // rayHit set the ray
+    if(rr && (!h || rr.distance < h.distance)){ setGizmo('robot'); toast('로봇 위치 기즈모 — W 이동 · E 회전 · 놓으면 정합 저장'); return; }
+    if(oid){
+      send({...clickMsg('grasp_select', h.point), obj_id: oid});
+      if(placeTgt.objId !== oid || placeTgt.sent) makePlaceTarget(h.object);
+      setGizmo('object'); toast('물체를 끌어 목표 위치로 → 반투명 목표 · 옮기기 실행 (Enter)');
+      return;
+    }
+    const f = raycaster.intersectObject(floorPhoto, false)[0];
+    if(h || f){ setGizmo('world'); toast('월드(iPhone 좌표) 위치 기즈모 — 놓으면 정합 저장'); return; }
+    setGizmo('none');
+  } else if(e.button === 2){                                // right click (no drag): grasp it right away
+    const hasObjs = reconObjs.visible && reconObjs.children.length;
+    const h = rayHit(e, hasObjs);
+    if(!h){ toast(hasObjs ? '물체 위에서 우클릭하세요' : '복원 메시나 점군 위에서 우클릭하세요'); return; }
+    pick(h.point, h.object.userData.objId ? `물체 #${h.object.userData.objId}` : '클릭한 곳', h.object.userData.objId);
+  }
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+// left sidebar tabs: 모터 | 객체
+function setLeftTab(k){
+  document.querySelectorAll('#ltabs .tab').forEach(t => t.classList.toggle('on', t.dataset.l === k));
+  document.querySelectorAll('#left .lpane').forEach(p => p.classList.toggle('on', p.dataset.l === k));
+  try { localStorage.setItem('elrobot.left', k); } catch(e) {}
+}
+$('#ltabs').addEventListener('click', e => { const k = e.target.closest('[data-l]')?.dataset.l; if(k) setLeftTab(k); });
+try { const k = localStorage.getItem('elrobot.left'); if(k) setLeftTab(k); } catch(e) {}
+// 객체 tab: robot, iPhone, reconstructed objects — hover highlights, click selects/focuses, right-click or 집기 grasps
+function focusOn(center, r = 0.12){
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  controls.target.copy(center); camera.position.copy(center).add(dir.multiplyScalar(r / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))));
+  controls.update();
+}
+const objTop = o => { world.updateMatrixWorld(true); return new THREE.Vector3(o.centre[0], o.centre[1] + o.size_mm[1] / 2000 - 0.004, o.centre[2]).applyMatrix4(world.matrixWorld); };
+let hierKey = null;
+function renderHier(){
+  const objs = [...(S?.camera?.recon?.objects || [])].sort((a, b) => a.id - b.id), g = S?.grasp || {};   // stable order
+  const stage = {planning: '계획 중', planned: '계획됨', executing: g.exec?.step ? `실행 ${g.exec.step}/${g.exec.of}` : '실행 중', done: '완료'}[g.stage] || '';
+  const selC = g.object?.centre_base;
+  const key = JSON.stringify([objs.map(o => [o.id, o.dims_mm, o.label?.name, o.label?.conf]), (S?.camera?.detect?.tracks || []).map(t => [t.id, t.hits]), stage, selC, S?.connected, S?.camera?.connected]);
+  if(key === hierKey) return;
+  hierKey = key;
+  $('#obj-count').textContent = objs.length || '';
+  const rows = [`<div class="gh">장치</div>`,
+    `<div class="it" data-act="robot" title="시점 맞추기"><span class="ic">precision_manufacturing</span><span class="nm">ElRobot</span><span class="meta">${S?.connected ? (S.robot_source === 'virtual' ? '가상' : 'USB') : '끊김'}</span></div>`,
+    `<div class="it" data-act="phone" title="iPhone 시점"><span class="ic">photo_camera</span><span class="nm">iPhone</span><span class="meta">${S?.camera?.connected ? S.camera.link : '없음'}</span></div>`,
+    `<div class="gh">물체 ${objs.length ? `· ${objs.length}` : ''}</div>`,
+    ...objs.map(o => `<div class="it" data-obj="${o.id}" title="클릭 선택 · 우클릭 집기"><span class="sw" style="background:#${OBJ_COLORS[o.id % OBJ_COLORS.length].toString(16).padStart(6, '0')}"></span>
+      <span class="nm">${o.label ? `${esc(o.label.name)} <span class="meta">${Math.round(o.label.conf * 100)}%</span>` : `물체 #${o.id}`}<br><span class="meta">#${o.id} · ${shapeText(o)}${o.model_vs_geo ? ` · 일관성 AI ${o.model_vs_geo[0]} / 기하 ${o.model_vs_geo[1]}` : ''}</span></span>${o.inst ? `<button class="small icon" data-ai="${o.inst}" title="AI 복원 (TripoSR → 실제 크기 정렬)"><span class="ic">auto_awesome</span></button>` : ''}<button class="small" data-pick="${o.id}" title="바로 집기"><span class="ic">back_hand</span>집기</button></div>`)];
+  const trks = S?.camera?.detect?.tracks || [];
+  if(trks.length) rows.push(`<div class="gh">마스크 물체 · 깊이로 안 잡힘 · ${trks.length}</div>`, ...trks.map(t => `<div class="it" style="cursor:default" title="인식 마스크를 3D로 올려 융합한 점 (${t.points}점)">
+      <span class="ic" style="color:var(--accent)">blur_on</span><span class="nm">${esc(t.name)} <span class="meta">×${t.hits}</span><br><span class="meta">${t.size_mm.join('×')} mm</span></span></div>`));
+  if(!objs.length) rows.push(`<div class="it" style="cursor:default"><span class="ic" style="color:var(--ink3)">category</span><span class="meta">${S?.camera?.recon?.running ? '분리된 물체 없음' : '복원을 시작하세요'}</span></div>`);
+  if(stage) rows.push(`<div class="gh">파지</div><div class="it" style="cursor:default"><span class="ic" style="color:var(--accent)">back_hand</span><span class="st">${stage}</span><span class="meta">${g.exec?.label || ''}</span></div>`);
+  $('#hier-list').innerHTML = rows.join('');
+}
+$('#hier-list').addEventListener('mouseover', e => { const id = +e.target.closest('[data-obj]')?.dataset.obj; setHover(reconObjs.children.find(m => m.userData.objId === id) || null); });
+$('#hier-list').addEventListener('mouseleave', () => setHover(null));
+$('#hier-list').addEventListener('click', e => {
+  const ab = e.target.closest('[data-ai]');
+  if(ab){ send({type: 'detect_model', id: +ab.dataset.ai}); toast('AI 복원: 처음 누르면 생성(수 초~10초), 다시 누르면 AI ↔ 기하 전환'); return; }
+  const pb = e.target.closest('[data-pick]');
+  if(pb){ const o = objInfo(+pb.dataset.pick); if(o) pick(objTop(o), `물체 #${o.id}`, o.id); return; }
+  const it = e.target.closest('.it'); if(!it) return;
+  if(it.dataset.act === 'robot') return resetCam();
+  if(it.dataset.act === 'phone') return viewFromPhone();
+  const o = objInfo(+it.dataset.obj); if(!o) return;
+  const p = objTop(o); focusOn(p); send({...clickMsg('grasp_select', p), obj_id: o.id});
+  const m = reconObjs.children.find(x => x.userData.objId === o.id);
+  if(m){ if(placeTgt.objId !== o.id || placeTgt.sent) makePlaceTarget(m); setGizmo('object'); }
+});
+$('#hier-list').addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const o = objInfo(+e.target.closest('[data-obj]')?.dataset.obj); if(o) pick(objTop(o), `물체 #${o.id}`, o.id);
+});
+
+// selected object highlight (ARKit world points, so it lives under `world`)
+const objGeom = new THREE.BufferGeometry();
+const objPts = new THREE.Points(objGeom, new THREE.PointsMaterial({color: 0xe8590c, size: 0.003, map: DOT, transparent: true, opacity: 0.8, depthWrite: false, alphaTest: 0.05}));
+objPts.frustumCulled = false; world.add(objPts);
+let objVersion = -1;
+// per-object TSDF (3 mm voxels) drawn over the selection; the points stay as the segmentation result
+const objMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({color: 0xe8590c, transparent: true, opacity: 0.55, roughness: .7}));
+objMesh.visible = false; objMesh.renderOrder = 1; world.add(objMesh);
+async function loadObject(){
+  const buf = await (await fetch('/grasp_object')).arrayBuffer();
+  if(buf.byteLength < 4){ objGeom.setDrawRange(0, 0); objMesh.visible = false; markSelected(); return; }
+  const n = new Uint32Array(buf, 0, 1)[0];
+  objGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf, 4, n * 3), 3));
+  objGeom.setDrawRange(0, n);
+  const mb = await (await fetch('/grasp_object_mesh')).arrayBuffer();
+  if(mb.byteLength < 8){ objMesh.visible = false; return; }
+  const [nv, nt] = new Uint32Array(mb, 0, 2);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mb, 8, nv * 3), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(mb, 8 + nv * 12, nv * 3), 3));
+  g.setIndex(new THREE.BufferAttribute(new Uint32Array(mb, 8 + nv * 24, nt * 3), 1));
+  objMesh.geometry.dispose(); objMesh.geometry = g;
+  objMesh.visible = nv > 0;
+  markSelected();
+}
+// the selection is one of the separated objects: tint that object, drop the dot / overlay markers
+let selObjId = null;
+function markSelected(){
+  const g = S?.grasp, pts = objGeom.attributes.position, n = objGeom.drawRange.count;
+  selObjId = null;
+  if(g?.object && pts && n){
+    let cx = 0, cz = 0; for(let i = 0; i < n; i++){ cx += pts.getX(i); cz += pts.getZ(i); } cx /= n; cz /= n;
+    const o = (S.camera?.recon?.objects || []).find(o => Math.hypot(o.centre[0] - cx, o.centre[2] - cz) < 0.03);
+    selObjId = o?.id ?? null;
+  }
+  const onObj = selObjId !== null && reconObjs.visible;
+  objPts.visible = !onObj; objMesh.visible = !onObj && objMesh.geometry.index?.count > 0;
+  for(const m of reconObjs.children) m.material.emissive.setHex(baseEmissive(m));
+}
+const baseEmissive = m => m.userData.objId === selObjId ? 0x6b2a00 : 0x000000;
+// planned gripper frame (base frame) → axes + pre-grasp line under the robot
+const graspAxes = new THREE.AxesHelper(0.06); graspAxes.matrixAutoUpdate = false; graspAxes.visible = false;
+let graspPlanKey = null;
+function renderGrasp(){
+  const g = S?.grasp; if(!g) return;
+  loadRegistration();
+  if(g.obj_version !== objVersion){ objVersion = g.obj_version; loadObject(); }
+  syncGhost(g.plan); watchExecution(g); watchPlace(g);
+  const key = JSON.stringify(g.plan?.frame || null);
+  if(key !== graspPlanKey && robot){
+    graspPlanKey = key;
+    if(!graspAxes.parent) robot.add(graspAxes);
+    if(g.plan?.frame){ graspAxes.matrix.fromArray(g.plan.frame.flat()).transpose(); graspAxes.visible = true; }
+    else graspAxes.visible = false;
+  }
+}
+// predicted object (MuJoCo, base frame) shown semi-transparent while the plan replays
+const ghost = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({color: 0x2f9e44, transparent: true, opacity: 0.38, depthWrite: false}));
+ghost.visible = false; ghost.userData.overlay = true; ghost.renderOrder = 2;
+let ghostKey = null, playing = null;
+function syncGhost(p){
+  const sim = p?.sim, key = sim?.frames ? JSON.stringify(sim.hull.v.length) + sim.frames.length + sim.lift_mm : null;
+  if(key === ghostKey) return;
+  ghostKey = key;
+  if(robot && !ghost.parent) robot.add(ghost);
+  if(!sim?.frames){ ghost.visible = false; return; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(sim.hull.v.flat(), 3));
+  g.setIndex(sim.hull.f.flat()); g.computeVertexNormals();
+  ghost.geometry.dispose(); ghost.geometry = g;
+  ghost.material.color.set(sim.held ? 0x2f9e44 : sim.lift_mm > 5 ? 0xe8590c : 0xe03131);
+  placeGhost(sim.frames[0]); ghost.visible = true;
+}
+function placeGhost(f){ ghost.position.set(f[1], f[2], f[3]); ghost.quaternion.set(f[5], f[6], f[7], f[4]); }  // MuJoCo quat = w x y z
+const hud = $('#simhud'), H = k => hud.querySelector(`[data-h="${k}"]`);
+function showHud(f, sim, mode, z0){
+  hud.classList.add('show');
+  H('mode').textContent = mode;
+  H('t').textContent = `${f[0].toFixed(1)} s`;
+  H('f').textContent = f.length > 16 ? `${f[16].toFixed(1)} N` : '-';
+  H('z').textContent = `${((f[3] - z0) * 1000).toFixed(0)} mm`;
+  const vd = H('vd'); vd.textContent = sim.verdict;
+  vd.style.background = sim.held ? 'var(--ok)' : sim.lift_mm > 5 ? 'var(--accent)' : 'var(--bad)';
+}
+function playSim(frames, speed = 1){      // replay the prediction: virtual robot (simulated joints) + object
+  const sim = S?.grasp?.plan?.sim || {}, t0 = performance.now(), T = frames[frames.length - 1][0], z0 = frames[0][3];
+  const mode = speed === 1 ? '실행 예측' : `미리보기 ×${speed}`;
+  playing = t0;
+  (function step(){
+    if(playing !== t0) return;
+    // during a real run follow the executor's own clock (its ticks run slower than wall time)
+    const ex = speed === 1 ? S?.grasp?.exec : null;
+    const t = ex?.t !== undefined && S.grasp.stage === 'executing' ? ex.t : (performance.now() - t0) / 1000 * speed;
+    if(t > T){
+      const f = frames[frames.length - 1]; placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0); playing = null;
+      setTimeout(() => { if(playing === null){ setGhostQ(null); hud.classList.remove('show'); } }, 2500);
+      return;
+    }
+    const f = frames[Math.min(frames.length - 1, Math.floor(t * 20))];
+    placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0);
+    requestAnimationFrame(step);
+  })();
+}
+let lastStage = null;
+function watchExecution(g){
+  if(g.stage === 'executing' && lastStage !== 'executing' && g.plan?.sim?.frames) playSim(g.plan.sim.frames, 1);
+  lastStage = g.stage;
+}
+function playPreview(){
+  const p = S?.grasp?.plan; if(!p?.q_grasp) return;
+  if(p.sim?.frames){ playSim(p.sim.frames, 2); return; }   // 2× real time
+  const keys = [[...p.q_now], [...p.q_pre, 0], [...p.q_grasp, 0], [...p.q_grasp, 2.2], [...p.q_lift, 2.2]];
+  const seg = 1200, t0 = performance.now();
+  (function step(){
+    const t = (performance.now() - t0) / seg, i = Math.floor(t);
+    if(i >= keys.length - 1){ setGhostQ(null); return; }
+    let s = t - i; s = s * s * (3 - 2 * s);
+    setGhostQ(keys[i].map((a, k) => a + (keys[i + 1][k] - a) * s));
+    requestAnimationFrame(step);
+  })();
+}
 </script>
 </body>
 </html>

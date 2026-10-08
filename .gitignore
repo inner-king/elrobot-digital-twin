@@ -8,3 +8,14 @@ __pycache__/
 *.pyc
 .DS_Store
 .venv/
+
+# third-party meshes (YCB CC-BY 4.0, Objaverse/Sketchfab CC-BY): fetched locally, see assets_kitchen/*/CREDITS
+assets_kitchen/
+models/
+third_party/
+
+# per-machine runtime state (iPhone IP, chosen robot port, gizmo registration, edited vocabulary)
+camera/camera.json
+robot.json
+registration.json
+camera/vocab.json

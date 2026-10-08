@@ -14,6 +14,23 @@
 | `camera/stream.py` | iPhone (Record3DStream 앱), USB ≈60 fps: RGB 1920×1440 JPEG, 깊이 256×192 float32 [m], 신뢰도 {0,1,2}, 내부 파라미터, 카메라→세계 4×4 | ≈10 Hz 점군 (N×3 float32 [m], ARKit 세계 좌표·y 위쪽) + 색, 카메라 위치, AprilTag 36h11 위치 `T_world_tag`, WebSocket `/ws_cam` 바이너리 |
 | `static/index.html` | `/ws`, `/ws_cam`, ElRobot URDF | 3D 화면 (로봇 + 점군 + iPhone 위치), 패널 (모터·캘리브레이션·시스템·로그·조작·카메라) |
 
+### 디지털 트윈 · 파지 (추가)
+
+| 모듈 | 입력 | 출력 |
+|---|---|---|
+| `camera/recon.py` | 키프레임 (깊이 256×192 m, RGB, K, 카메라→세계 4×4) | 방 TSDF 메시 (1 cm), 물체별 TSDF (3 mm) + 뒷면 완성, 물체 레지스트리 (확정 후 ICP 6DoF 추적 ≈8 ms/물체), 바닥 정사영 PNG (4 mm/px) |
+| `camera/complete.py` | 물체 관측 메시 | 가려진 면 완성 (대칭·회전체·용기 사전·공간 조각) → 하나의 닫힌 메시 |
+| `camera/detect.py` | 키프레임 RGB | YOLOE 인스턴스 마스크·라벨 (텍스트 어휘), 선택적으로 PromptDA 깊이, TripoSR 단일 영상 모델 |
+| `grasp/planner.py` | 물체 점 (베이스 좌표 m), 장면 점 | 위에서 내려가는 파지 (TACO 후보 + IK + 직선 경로), 놓기 경로 (`plan_place`) |
+| `grasp/sim.py` | 계획, 물체 볼록 껍질 | MuJoCo 예측: 20 Hz 물체 자세·관절·집게 힘, 판정 (들림 / 옮겨 놓음 + 목표 오차) |
+| `grasp/manager.py` | 브라우저 명령 (`grasp_pick`, `grasp_place`) | 계획 → 예측 → 실행 (실제 팔 또는 가상 팔 + 가상 장면 동기화) |
+| `virtual.py`, `virtual_kitchen.py` | — | 가상 서보 버스, 가상 iPhone (상자 / 주방 실제 메시 장면) |
+
+화면: 물체 클릭 → 반투명 목표 + 기즈모 (W 이동 · E 회전) → Enter / '옮기기 실행'이면 로봇이 집어서 목표에 놓습니다. 로봇·바닥 클릭은 정합 기즈모.
+
+파지 기능은 이 저장소 밖의 형제 폴더를 읽습니다: `../taco_tools` (grasp_transfer.py), `../elrobot_mujoco` (elrobot.xml, pick_demo.py), `../taco_viewer/robot/gripper.json`.
+주방 장면 메시(YCB CC BY 4.0, Objaverse CC BY), 모델 가중치(YOLOE — AGPL-3.0, MobileCLIP, PromptDA, TripoSR)는 포함하지 않습니다 (`assets_kitchen/`, `models/`, `third_party/`).
+
 관절 각도 매핑은 norma-core station-viewer와 같습니다: `p = (pos − min) / (max − min)`, `angle = lower + p · (upper − lower)` (URDF 관절 한계).
 
 ## 준비
@@ -42,6 +59,8 @@ SDK가 없으면 카메라 패널만 비활성화되고 로봇 콘솔은 그대�
 ```bash
 uv run --with pyserial --with fastapi --with "uvicorn[standard]" --with numpy --with opencv-python --with pymobiledevice3 python server.py
 ```
+
+복원·파지까지 쓰려면 `--with open3d --with trimesh --with scipy --with mujoco --with rtree --with pillow --with scikit-image`를 더하고, 인식은 `--with ultralytics --with "clip @ git+https://github.com/ultralytics/CLIP.git"`.
 
 브라우저에서 `http://localhost:8765`. 시리얼 포트는 `/dev/cu.usbmodem*`을 자동으로 찾고, `ARM_PORT`로 지정할 수 있습니다.
 
