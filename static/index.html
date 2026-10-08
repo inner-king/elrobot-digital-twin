@@ -779,25 +779,26 @@ function drawLabels(){
 // [ours] picture-in-picture views (bottom right): the iPhone's own view and a camera at the gripper looking along its
 // approach (the TCP sits 90 mm along the gripper body's +y, elrobot.xml site "tcp"; eye between the jaws at 62 mm —
 // at 45 mm it sat inside the gripper body's mesh)
-const camWorld = new THREE.PerspectiveCamera(52, 4 / 3, 0.02, 30), camRobot = new THREE.PerspectiveCamera(70, 4 / 3, 0.015, 10);
+const camWorld = new THREE.PerspectiveCamera(52, 4 / 3, 0.02, 30), camRobot = new THREE.PerspectiveCamera(60, 4 / 3, 0.01, 10);
 camWorld.matrixAutoUpdate = camRobot.matrixAutoUpdate = false;
-// the robot's camera has a place of its own (ElRobot: a table camera or a mount): a camera object in the scene the user
-// moves onto the real one (click it: 6-DoF gizmo, saved with the registration as "camera"); looks along its −z
-const camRig = new THREE.Group(); camRig.matrixAutoUpdate = false; camRig.userData.set = false; scene.add(camRig);
-const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.03), new THREE.MeshStandardMaterial({color: 0x343a40, roughness: .5}));
-camBody.userData.camRig = true; camRig.add(camBody);
-const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({color: 0x1c7ed6}));
-camLens.position.z = -0.021; camLens.userData.camRig = true; camRig.add(camLens);
-camRig.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ConeGeometry(0.06, 0.1, 4, 1, true).rotateX(-Math.PI / 2).rotateZ(Math.PI / 4).translate(0, 0, -0.08)),
-  new THREE.LineBasicMaterial({color: 0x1c7ed6, transparent: true, opacity: .6})));
-function defaultCamRig(){        // behind and above the robot, looking down at its workspace
-  if(!robot || camRig.userData.set) return;
-  robot.updateMatrixWorld(true);
-  const B = new THREE.Vector3().setFromMatrixPosition(robot.matrixWorld);
-  const fwd = new THREE.Vector3(0, 1, 0).transformDirection(robot.matrixWorld); fwd.y = 0; fwd.normalize();
-  const t = new THREE.PerspectiveCamera(); t.position.copy(B).addScaledVector(fwd, -0.05).add(new THREE.Vector3(0, 0.45, 0));
-  t.lookAt(B.clone().addScaledVector(fwd, 0.25)); t.updateMatrix();
-  camRig.matrix.copy(t.matrix); camRig.matrixWorldNeedsUpdate = true; camRig.userData.set = true;
+// the robot's camera where ElRobot mounts it (norma-core hardware/elrobot/STEP/ElRobot.stp: UVC_Camera on
+// CameraMount_square32mm, on the Gripper_Base). Its pose in the Gripper_Base_v1_1 link frame came from aligning the
+// STEP Gripper_Base to the URDF/MuJoCo one (0.41 mm mean error): lens front at (1.6, 24.4, 59.9) mm, looking along
+// the board normal (0.01, 0.90, −0.43) — forward and 25.5° down toward the jaws; it turns with the wrist (joint 7).
+const camRig = new THREE.Group(); camRig.matrixAutoUpdate = false;
+{
+  const a = new THREE.Vector3(0.01, 0.90, -0.43).normalize();            // optical axis = camera −z
+  const up = new THREE.Vector3(0, 0, 1).addScaledVector(a, -a.z).normalize();   // image up: away from the jaws
+  const zc = a.clone().negate(), xc = new THREE.Vector3().crossVectors(up, zc).normalize();
+  camRig.matrix.makeBasis(xc, up, zc).setPosition(0.0016, 0.0244, 0.0599);
+}
+const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.032, 0.006).translate(0, 0, 0.008), new THREE.MeshStandardMaterial({color: 0x2b2f33, roughness: .6}));
+const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.008, 20).rotateX(Math.PI / 2).translate(0, 0, 0.001), new THREE.MeshStandardMaterial({color: 0x1c7ed6}));
+camRig.add(camBody, camLens);
+function mountCamRig(){                      // onto the gripper link once the robot model is loaded
+  const g = robot?.links?.Gripper_Base_v1_1;
+  if(g && camRig.parent !== g) g.add(camRig);
+  return !!g;
 }
 let insetsOn = true, insetsReady = false;     // ready once the whole module ran (the gizmo is declared further down)
 try { insetsOn = localStorage.getItem('elrobot.insets') !== '0'; } catch(e) {}
@@ -809,8 +810,8 @@ function insetPose(kind){
     world.updateMatrixWorld(true);
     return camWorld.matrixWorld.multiplyMatrices(world.matrixWorld, camInfo.T), camWorld;
   }
-  if(!robot) return null;
-  defaultCamRig(); camRig.updateMatrixWorld(true);
+  if(!mountCamRig()) return null;
+  camRig.updateMatrixWorld(true);
   camRobot.matrixWorld.copy(camRig.matrixWorld);
   return camRobot;
 }
@@ -852,7 +853,7 @@ function renderInsets(){
     }).catch(() => {}).finally(() => { busy = false; });
   }, 200);
 })();
-(function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); if(insetsReady) renderInsets(); })();
+(function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); if(insetsReady){ mountCamRig(); renderInsets(); } })();
 
 // ---------------------------------------------------------------- slider views (left accordion + every 조작 panel)
 const SLIDER_HTML = `<div class="slider-wrap"><div class="live-mark"></div><input type="range" min="0" max="4095" disabled></div>
@@ -1523,7 +1524,7 @@ function setGizmo(target, mode){
   renderGzbar();
   if(target === 'none') return;
   if(target === 'object'){ attachObjectGizmo(); return; }
-  gizmoTarget = target === 'robot' ? robotRoot : target === 'camera' ? camRig : worldAdj;
+  gizmoTarget = target === 'robot' ? robotRoot : worldAdj;
   gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
   gizmo.setMode(gizmoMode);
   if(gizmoMode === 'rotate'){ gizmo.setSpace('local'); if(target !== 'camera') gizmo.showX = gizmo.showZ = false; }   // robot / world: yaw only
@@ -1645,8 +1646,7 @@ function autoPlaceRobot(){
   robotRoot.matrix.makeRotationY(th).setPosition(p); robotRoot.matrixWorldNeedsUpdate = true;
   saveRegistration(); toast(`로봇을 물체 ${objs.length}개 건너편 ${Math.round(AUTO_REACH_M * 100)} cm에 세웠습니다`);
 }
-function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix),
-  ...(camRig.userData.set ? {camera: rowMajor(camRig.matrix)} : {})}); }
+function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix)}); }
 let regKey = null;
 function loadRegistration(){   // shared: follows the server, so a change by another user shows up here
   const reg = S?.grasp?.registration; if(!reg || gizmo.dragging) return;
@@ -1654,7 +1654,6 @@ function loadRegistration(){   // shared: follows the server, so a change by ano
   regKey = key;
   robotRoot.matrix.fromArray(reg.robot).transpose(); worldAdj.matrix.fromArray(reg.world).transpose();
   robotRoot.matrixWorldNeedsUpdate = worldAdj.matrixWorldNeedsUpdate = true;
-  if(reg.camera){ camRig.matrix.fromArray(reg.camera).transpose(); camRig.matrixWorldNeedsUpdate = true; camRig.userData.set = true; }
   if(gizmoTarget) gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
 }
 
@@ -1712,8 +1711,6 @@ renderer.domElement.addEventListener('pointerup', e => {
     const h = rayHit(e, false), oid = h?.object?.userData.objId;
     const shown = o => { for(let x = o; x; x = x.parent) if(!x.visible) return false; return true; };
     const rr = robot ? raycaster.intersectObject(robot, true).find(i => i.object.isMesh && !i.object.userData.overlay && shown(i.object)) : null;  // rayHit set the ray
-    const cr_ = raycaster.intersectObject(camRig, true).find(i => i.object.userData.camRig);
-    if(cr_ && (!h || cr_.distance < h.distance) && (!rr || cr_.distance < rr.distance)){ setGizmo('camera'); toast('로봇 카메라 — 실제 카메라 위치·방향으로 옮기세요 (W 이동 · E 회전, 놓으면 저장)'); return; }
     if(rr && (!h || rr.distance < h.distance)){ setGizmo('robot'); toast('로봇 위치 기즈모 — W 이동 · E 회전 · 놓으면 정합 저장'); return; }
     if(oid){
       send({...clickMsg('grasp_select', h.point), obj_id: oid});
