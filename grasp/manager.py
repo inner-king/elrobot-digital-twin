@@ -63,7 +63,7 @@ class GraspManager:
             reg = json.loads(REG_FILE.read_text())
         except Exception:
             reg = {"robot": np.eye(4).ravel().tolist(), "world": np.eye(4).ravel().tolist()}
-        reg = {k: _yaw_only(reg[k]) for k in ("robot", "world")}
+        reg = {**reg, **{k: _yaw_only(reg[k]) for k in ("robot", "world")}}
         self.state = {"registration": reg, "stage": "idle", "error": None, "plan": None, "object": None,
                       "obj_version": 0, "exec": None, "virtual_moved": {}}
         self._vmoved = {}         # [ours] recon object id → 4×4 ARKit-world move done by the virtual robot (real camera)
@@ -157,6 +157,9 @@ class GraspManager:
         t = c["type"]
         if t == "reg_set":
             reg = {"robot": _yaw_only([float(x) for x in c["robot"]]), "world": _yaw_only([float(x) for x in c["world"]])}
+            cam = c.get("camera") or self.state["registration"].get("camera")
+            if cam:                                   # the robot's camera (scene frame, any orientation)
+                reg["camera"] = [float(x) for x in cam]
             self.state["registration"] = reg
             REG_FILE.write_text(json.dumps(reg))
         elif t == "grasp_select":

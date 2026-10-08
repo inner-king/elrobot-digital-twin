@@ -256,6 +256,7 @@ class CameraStream:
         pw = (T @ pc)[:3].T.astype(np.float32)
         ch, cw = color.shape[:2]
         rgb = color[(v * ch // dh).clip(0, ch - 1), (u * cw // dw).clip(0, cw - 1)][:, ::-1]  # BGR→RGB
+        self._last_color = color                       # the camera's own image, for the console's inset (/camera.jpg)
         tags = self._detect_tags(color, K, T)
         self._nproc += 1
         self._last_world_pts = pw
@@ -282,6 +283,16 @@ class CameraStream:
             self.seq += 1
             self.T_world_cam = T
             self.status.update(points=int(len(pw)), tags=tags)
+
+    def color_jpeg(self, width=480):
+        """newest colour frame as JPEG (BGR source), or None"""
+        c = getattr(self, "_last_color", None)
+        if c is None:
+            return None
+        h, w = c.shape[:2]
+        small = cv2.resize(c, (width, int(h * width / w)), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        return buf.tobytes() if ok else None
 
     def _update_auto_floor(self, pw, centre=None):
         """Support height in ARKit world: gravity is y, a horizontal surface is a sharp peak in the y histogram.

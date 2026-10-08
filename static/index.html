@@ -91,7 +91,7 @@ main{position:relative;background:#cfd8e2;overflow:hidden}
 .simhud{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);display:none;gap:6px;align-items:center;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:999px;padding:5px 8px;box-shadow:0 4px 14px rgba(20,24,30,.08)}
 .simhud.show{display:flex}
 .insets{position:absolute;right:12px;bottom:34px;display:flex;gap:8px;pointer-events:none}
-.insets .iv{width:min(232px,24vw);aspect-ratio:4/3;border:1px solid var(--line2);border-radius:8px;position:relative;background:transparent;box-shadow:0 4px 14px rgba(20,24,30,.12)}
+.insets .iv{width:min(168px,18vw);aspect-ratio:4/3;border:1px solid var(--line2);border-radius:8px;position:relative;background:transparent;box-shadow:0 4px 14px rgba(20,24,30,.12)}
 .insets .iv span{position:absolute;left:6px;top:4px;font:600 11px var(--sans);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 .insets .iv em{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px var(--sans);color:var(--ink3);font-style:normal}
 .insets.off .iv{display:none}
@@ -281,7 +281,7 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
       <button class="icon" id="inset-toggle" title="월드 카메라 · 로봇 1인칭 보조 화면"><span class="ic">picture_in_picture</span></button></div>
     <svg class="vgizmo" id="vgizmo" viewBox="-46 -46 92 92"></svg>
     <div class="olabels" id="olabels"></div>
-    <div class="insets" id="insets"><div class="iv" data-iv="world"><span>월드 카메라 (iPhone)</span><em></em></div><div class="iv" data-iv="robot"><span>로봇 1인칭 (집게)</span><em></em></div></div>
+    <div class="insets" id="insets"><div class="iv" data-iv="world"><img alt="" style="width:100%;height:100%;object-fit:cover;border-radius:7px;display:none"><span>월드 카메라 (실제 영상)</span><em></em></div><div class="iv" data-iv="robot"><span>로봇 카메라</span><em></em></div></div>
     <div class="gzbar" id="gzbar"><span class="ic" data-z="icon">open_with</span><span class="k" data-z="kind"></span>
       <button class="small" data-z="translate" title="이동 (W)"><span class="ic">open_with</span>이동 W</button>
       <button class="small" data-z="rotate" title="회전 (E)"><span class="ic">rotate_right</span>회전 E</button>
@@ -781,8 +781,24 @@ function drawLabels(){
 // at 45 mm it sat inside the gripper body's mesh)
 const camWorld = new THREE.PerspectiveCamera(52, 4 / 3, 0.02, 30), camRobot = new THREE.PerspectiveCamera(70, 4 / 3, 0.015, 10);
 camWorld.matrixAutoUpdate = camRobot.matrixAutoUpdate = false;
-const EYE = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0))
-  .setPosition(0.0018, 0.062, 0.0028);                                  // camera −z = gripper +y (approach), up = +z; just past the palm
+// the robot's camera has a place of its own (ElRobot: a table camera or a mount): a camera object in the scene the user
+// moves onto the real one (click it: 6-DoF gizmo, saved with the registration as "camera"); looks along its −z
+const camRig = new THREE.Group(); camRig.matrixAutoUpdate = false; camRig.userData.set = false; scene.add(camRig);
+const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.03), new THREE.MeshStandardMaterial({color: 0x343a40, roughness: .5}));
+camBody.userData.camRig = true; camRig.add(camBody);
+const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({color: 0x1c7ed6}));
+camLens.position.z = -0.021; camLens.userData.camRig = true; camRig.add(camLens);
+camRig.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.ConeGeometry(0.06, 0.1, 4, 1, true).rotateX(-Math.PI / 2).rotateZ(Math.PI / 4).translate(0, 0, -0.08)),
+  new THREE.LineBasicMaterial({color: 0x1c7ed6, transparent: true, opacity: .6})));
+function defaultCamRig(){        // behind and above the robot, looking down at its workspace
+  if(!robot || camRig.userData.set) return;
+  robot.updateMatrixWorld(true);
+  const B = new THREE.Vector3().setFromMatrixPosition(robot.matrixWorld);
+  const fwd = new THREE.Vector3(0, 1, 0).transformDirection(robot.matrixWorld); fwd.y = 0; fwd.normalize();
+  const t = new THREE.PerspectiveCamera(); t.position.copy(B).addScaledVector(fwd, -0.05).add(new THREE.Vector3(0, 0.45, 0));
+  t.lookAt(B.clone().addScaledVector(fwd, 0.25)); t.updateMatrix();
+  camRig.matrix.copy(t.matrix); camRig.matrixWorldNeedsUpdate = true; camRig.userData.set = true;
+}
 let insetsOn = true, insetsReady = false;     // ready once the whole module ran (the gizmo is declared further down)
 try { insetsOn = localStorage.getItem('elrobot.insets') !== '0'; } catch(e) {}
 const insetEl = $('#insets'); insetEl.classList.toggle('off', !insetsOn);
@@ -793,20 +809,22 @@ function insetPose(kind){
     world.updateMatrixWorld(true);
     return camWorld.matrixWorld.multiplyMatrices(world.matrixWorld, camInfo.T), camWorld;
   }
-  const g = robot?.links?.Gripper_Base_v1_1; if(!g) return null;
-  g.updateMatrixWorld(true);
-  camRobot.matrixWorld.multiplyMatrices(g.matrixWorld, EYE);
+  if(!robot) return null;
+  defaultCamRig(); camRig.updateMatrixWorld(true);
+  camRobot.matrixWorld.copy(camRig.matrixWorld);
   return camRobot;
 }
 function renderInsets(){
   if(!insetsOn) return;
   const cr = renderer.domElement.getBoundingClientRect();
-  const hide = [gizmo, phone];
+  const hide = [gizmo, phone, camRig];
   const was = hide.map(o => o.visible);
   hide.forEach(o => o.visible = false);
   renderer.setScissorTest(true);
   for(const el of insetEl.querySelectorAll('.iv')){
-    const kind = el.dataset.iv, cam = insetPose(kind);
+    const kind = el.dataset.iv;
+    if(kind === 'world') continue;                 // the camera's own image (img, refreshed below), not a render
+    const cam = insetPose(kind);
     el.querySelector('em').textContent = cam ? '' : (kind === 'world' ? 'iPhone 자세 없음' : '로봇 모델 없음');
     if(!cam) continue;
     const r = el.getBoundingClientRect(), x = r.left - cr.left, y = cr.bottom - r.bottom;
@@ -819,6 +837,21 @@ function renderInsets(){
   renderer.setViewport(0, 0, cr.width, cr.height);
   hide.forEach((o, i) => o.visible = was[i]);
 }
+// world camera inset: the real frame the camera streams (/camera.jpg), ≈ 5 Hz while shown
+(function camImg(){
+  const el = insetEl.querySelector('[data-iv="world"]'), img = el.querySelector('img'), em = el.querySelector('em');
+  let busy = false;
+  setInterval(() => {
+    if(!insetsOn || busy || document.hidden) return;
+    busy = true;
+    fetch('/camera.jpg?t=' + Date.now()).then(r => r.blob()).then(b => {
+      if(!b.size){ img.style.display = 'none'; em.textContent = '카메라 영상 없음'; return; }
+      const u = URL.createObjectURL(b), old = img.src;
+      img.onload = () => { if(old.startsWith('blob:')) URL.revokeObjectURL(old); };
+      img.src = u; img.style.display = ''; em.textContent = '';
+    }).catch(() => {}).finally(() => { busy = false; });
+  }, 200);
+})();
 (function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); if(insetsReady) renderInsets(); })();
 
 // ---------------------------------------------------------------- slider views (left accordion + every 조작 panel)
@@ -1476,7 +1509,7 @@ const gizmoProxy = new THREE.Object3D(); scene.add(gizmoProxy);   // TransformCo
 let gizmoTarget = null;
 gizmo.addEventListener('objectChange', () => {
   if(!gizmoTarget) return;
-  if(gizmoMode === 'rotate'){       // yaw only (about the scene's vertical): drop any tilt before it reaches the registration
+  if(gizmoMode === 'rotate' && gizmoKind !== 'camera'){       // robot / world: yaw only (about the scene's vertical): drop any tilt before it reaches the registration
     const e = new THREE.Euler().setFromQuaternion(gizmoProxy.quaternion, 'YXZ'); e.x = e.z = 0; gizmoProxy.quaternion.setFromEuler(e);
   }
   gizmoProxy.updateMatrix(); gizmoTarget.matrix.copy(gizmoProxy.matrix); gizmoTarget.matrixWorldNeedsUpdate = true;
@@ -1490,10 +1523,10 @@ function setGizmo(target, mode){
   renderGzbar();
   if(target === 'none') return;
   if(target === 'object'){ attachObjectGizmo(); return; }
-  gizmoTarget = target === 'robot' ? robotRoot : worldAdj;
+  gizmoTarget = target === 'robot' ? robotRoot : target === 'camera' ? camRig : worldAdj;
   gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
   gizmo.setMode(gizmoMode);
-  if(gizmoMode === 'rotate'){ gizmo.setSpace('local'); gizmo.showX = gizmo.showZ = false; }   // robot / world: yaw only
+  if(gizmoMode === 'rotate'){ gizmo.setSpace('local'); if(target !== 'camera') gizmo.showX = gizmo.showZ = false; }   // robot / world: yaw only
   gizmo.attach(gizmoProxy);
 }
 // ---- [ours] object place target: the clicked object's completed mesh as a semi-transparent copy the gizmo moves
@@ -1539,8 +1572,8 @@ const gzbar = $('#gzbar'), placebar = $('#placebar');
 function renderGzbar(){
   gzbar.classList.toggle('show', gizmoKind !== 'none');
   const o = gizmoKind === 'object' ? objInfo(placeTgt.objId) : null;
-  gzbar.querySelector('[data-z="kind"]').textContent = {robot: '로봇 위치 (정합)', world: '월드 위치 (정합)', object: `${o?.label ? o.label.name : '물체'} #${placeTgt.objId ?? ''} 목표`}[gizmoKind] || '';
-  gzbar.querySelector('[data-z="icon"]').textContent = {robot: 'precision_manufacturing', world: 'public', object: 'deployed_code'}[gizmoKind] || 'open_with';
+  gzbar.querySelector('[data-z="kind"]').textContent = {robot: '로봇 위치 (정합)', world: '월드 위치 (정합)', camera: '로봇 카메라 (6축)', object: `${o?.label ? o.label.name : '물체'} #${placeTgt.objId ?? ''} 목표`}[gizmoKind] || '';
+  gzbar.querySelector('[data-z="icon"]').textContent = {robot: 'precision_manufacturing', world: 'public', camera: 'videocam', object: 'deployed_code'}[gizmoKind] || 'open_with';
   gzbar.querySelectorAll('[data-z="translate"],[data-z="rotate"]').forEach(b => b.classList.toggle('on', b.dataset.z === gizmoMode));
 }
 function renderPlacebar(){
@@ -1612,7 +1645,8 @@ function autoPlaceRobot(){
   robotRoot.matrix.makeRotationY(th).setPosition(p); robotRoot.matrixWorldNeedsUpdate = true;
   saveRegistration(); toast(`로봇을 물체 ${objs.length}개 건너편 ${Math.round(AUTO_REACH_M * 100)} cm에 세웠습니다`);
 }
-function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix)}); }
+function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix),
+  ...(camRig.userData.set ? {camera: rowMajor(camRig.matrix)} : {})}); }
 let regKey = null;
 function loadRegistration(){   // shared: follows the server, so a change by another user shows up here
   const reg = S?.grasp?.registration; if(!reg || gizmo.dragging) return;
@@ -1620,6 +1654,7 @@ function loadRegistration(){   // shared: follows the server, so a change by ano
   regKey = key;
   robotRoot.matrix.fromArray(reg.robot).transpose(); worldAdj.matrix.fromArray(reg.world).transpose();
   robotRoot.matrixWorldNeedsUpdate = worldAdj.matrixWorldNeedsUpdate = true;
+  if(reg.camera){ camRig.matrix.fromArray(reg.camera).transpose(); camRig.matrixWorldNeedsUpdate = true; camRig.userData.set = true; }
   if(gizmoTarget) gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
 }
 
@@ -1677,6 +1712,8 @@ renderer.domElement.addEventListener('pointerup', e => {
     const h = rayHit(e, false), oid = h?.object?.userData.objId;
     const shown = o => { for(let x = o; x; x = x.parent) if(!x.visible) return false; return true; };
     const rr = robot ? raycaster.intersectObject(robot, true).find(i => i.object.isMesh && !i.object.userData.overlay && shown(i.object)) : null;  // rayHit set the ray
+    const cr_ = raycaster.intersectObject(camRig, true).find(i => i.object.userData.camRig);
+    if(cr_ && (!h || cr_.distance < h.distance) && (!rr || cr_.distance < rr.distance)){ setGizmo('camera'); toast('로봇 카메라 — 실제 카메라 위치·방향으로 옮기세요 (W 이동 · E 회전, 놓으면 저장)'); return; }
     if(rr && (!h || rr.distance < h.distance)){ setGizmo('robot'); toast('로봇 위치 기즈모 — W 이동 · E 회전 · 놓으면 정합 저장'); return; }
     if(oid){
       send({...clickMsg('grasp_select', h.point), obj_id: oid});

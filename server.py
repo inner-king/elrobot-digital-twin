@@ -649,6 +649,13 @@ def detect_tracks():
     return Response(content=fn() if fn else b"", media_type="application/octet-stream")
 
 
+@app.get("/camera.jpg")
+def camera_jpg():
+    """the camera's own newest colour image (iPhone or virtual camera), for the console's inset"""
+    j = cam.color_jpeg() if cam else None
+    return Response(content=j or b"", media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/recon_floor.png")
 def recon_floor_png():
     """floor orthophoto (rows = +z, columns = +x of the ARKit world); bounds in /recon_floor.json"""
