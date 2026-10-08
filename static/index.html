@@ -369,6 +369,7 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
     <select data-k="g-mode" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
       <option value="translate">이동</option><option value="rotate">회전</option></select>
     <button class="icon small" data-k="g-reset" title="선택 대상 초기화"><span class="ic">restart_alt</span></button>
+    <button class="small" data-k="g-auto" title="복원된 물체들이 팔에 닿도록 로봇을 작업면 위, 물체 건너편에 세움 (가상 로봇)"><span class="ic">precision_manufacturing</span>로봇 자동 배치</button>
   </div>
   <div class="kv" data-k="g-reg"></div>
   <h4><span class="ic">back_hand</span>파지</h4>
@@ -574,7 +575,24 @@ async function loadReconObjects(){
     // (no edge outline: on a scanned surface the 50° crease edges came out as a speckle over the whole object)
     m.frustumCulled = false; m.castShadow = m.receiveShadow = true; reconObjs.add(m);
   }
+  applyVirtualMoved();
   markSelected();
+}
+// [ours] real camera + virtual robot: objects the virtual robot moved stay where the prediction left them
+// (server state grasp.virtual_moved: object id → 4×4 ARKit-world move); the camera still sees the real one in place
+let vmKey = null;
+const realCam = () => S?.camera?.link && S.camera.link !== 'virtual';
+function applyVirtualMoved(force){
+  const vm = S?.grasp?.virtual_moved || {}, key = JSON.stringify(vm);
+  if(!force && key === vmKey) return;
+  vmKey = key;
+  for(const m of reconObjs.children){
+    if(m.userData.animating) continue;
+    const a = vm[m.userData.objId];
+    m.matrixAutoUpdate = false;
+    if(a) m.matrix.fromArray(a).transpose(); else m.matrix.identity();
+    m.matrixWorldNeedsUpdate = true;
+  }
 }
 function setShowComplete(on){
   showComplete = on;
@@ -1054,6 +1072,7 @@ const PANEL_DEFS = {
         (t === 'robot' ? robotRoot : worldAdj).matrix.identity(); saveRegistration();
       });
       q(r, 'g-preview').addEventListener('click', playPreview);
+      q(r, 'g-auto').addEventListener('click', autoPlaceRobot);
       q(r, 'g-exec').addEventListener('click', () => {
         if(confirm('실제 로봇 실행: 접근 → 하강 → 닫기 → 들기\n중단: STOP / Esc')) send({type:'grasp_exec'});
       });
@@ -1442,9 +1461,11 @@ function clearPlaceTarget(){
 function makePlaceTarget(m){
   clearPlaceTarget();
   const g = m.userData.full; g.computeBoundingBox();
-  const c = g.boundingBox.getCenter(new THREE.Vector3());
+  // where the object is now (a virtual move earlier shows in m.matrix): the target starts there
+  const c = g.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(m.matrix);
   const pivot = new THREE.Object3D(); pivot.position.copy(c); pivot.rotation.order = 'YXZ'; world.add(pivot);
-  const gm = new THREE.Mesh(g, TGT_MAT); gm.position.copy(c).negate(); gm.userData.overlay = true; gm.renderOrder = 3; gm.raycast = () => {};
+  const gm = new THREE.Mesh(g, TGT_MAT); gm.userData.overlay = true; gm.renderOrder = 3; gm.raycast = () => {};
+  gm.matrixAutoUpdate = false; gm.matrix.makeTranslation(-c.x, -c.y, -c.z).multiply(m.matrix);
   pivot.add(gm); pivot.visible = false;
   Object.assign(placeTgt, {pivot, objId: m.userData.objId, c: c.clone(), sent: false});
 }
@@ -1519,6 +1540,28 @@ window.addEventListener('keydown', e => {
   if(e.key === 'Escape'){ setGizmo('none'); }
 });
 const rowMajor = m => m.clone().transpose().toArray();
+// [ours] virtual robot next to the scanned objects: on the work surface (scene y = 0), AUTO_REACH_M beyond the objects'
+// centre as seen from the phone, facing them (ElRobot reaches forward along its base +y)
+const AUTO_REACH_M = 0.22;
+function autoPlaceRobot(){
+  const objs = S?.camera?.recon?.objects || [];
+  if(!objs.length || !robot){ toast('복원된 물체가 없습니다 — 복원을 먼저 하세요'); return; }
+  world.updateMatrixWorld(true);
+  const c = new THREE.Vector3();
+  for(const o of objs) c.add(new THREE.Vector3(...o.centre).applyMatrix4(world.matrixWorld));
+  c.divideScalar(objs.length);
+  const cam = camInfo.T ? new THREE.Vector3().setFromMatrixPosition(camInfo.T).applyMatrix4(world.matrixWorld) : camera.position.clone();
+  const dir = c.clone().sub(cam); dir.y = 0;
+  if(dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+  dir.normalize();
+  const p = c.clone().addScaledVector(dir, AUTO_REACH_M); p.y = 0;
+  const face = dir.clone().negate();                                   // base +y should point at the objects
+  const d0 = new THREE.Vector3(0, 1, 0).applyQuaternion(robot.quaternion);
+  const phi = v => Math.atan2(-v.z, v.x);
+  const th = phi(face) - phi(d0);
+  robotRoot.matrix.makeRotationY(th).setPosition(p); robotRoot.matrixWorldNeedsUpdate = true;
+  saveRegistration(); toast(`로봇을 물체 ${objs.length}개 건너편 ${Math.round(AUTO_REACH_M * 100)} cm에 세웠습니다`);
+}
 function saveRegistration(){ send({type:'reg_set', robot: rowMajor(robotRoot.matrix), world: rowMajor(worldAdj.matrix)}); }
 let regKey = null;
 function loadRegistration(){   // shared: follows the server, so a change by another user shows up here
@@ -1690,7 +1733,8 @@ let selObjId = null;
 function markSelected(){
   const g = S?.grasp, pts = objGeom.attributes.position, n = objGeom.drawRange.count;
   selObjId = null;
-  if(g?.object && pts && n){
+  if(g?.object?.obj_id != null && reconObjs.children.some(m => m.userData.objId === g.object.obj_id)) selObjId = g.object.obj_id;
+  else if(g?.object && pts && n){
     let cx = 0, cz = 0; for(let i = 0; i < n; i++){ cx += pts.getX(i); cz += pts.getZ(i); } cx /= n; cz /= n;
     const o = (S.camera?.recon?.objects || []).find(o => Math.hypot(o.centre[0] - cx, o.centre[2] - cz) < 0.03);
     selObjId = o?.id ?? null;
@@ -1707,7 +1751,7 @@ function renderGrasp(){
   const g = S?.grasp; if(!g) return;
   loadRegistration();
   if(g.obj_version !== objVersion){ objVersion = g.obj_version; loadObject(); }
-  syncGhost(g.plan); watchExecution(g); watchPlace(g);
+  syncGhost(g.plan); watchExecution(g); watchPlace(g); applyVirtualMoved();
   const key = JSON.stringify(g.plan?.frame || null);
   if(key !== graspPlanKey && robot){
     graspPlanKey = key;
@@ -1744,8 +1788,20 @@ function showHud(f, sim, mode, z0){
   const vd = H('vd'); vd.textContent = sim.verdict;
   vd.style.background = sim.held ? 'var(--ok)' : sim.lift_mm > 5 ? 'var(--accent)' : 'var(--bad)';
 }
+const poseOf = f => new THREE.Matrix4().compose(new THREE.Vector3(f[1], f[2], f[3]), new THREE.Quaternion(f[5], f[6], f[7], f[4]), new THREE.Vector3(1, 1, 1));
+function followMesh(frames){   // the executing object's own mesh follows the prediction (base-frame pose → world group)
+  if(!realCam() || selObjId === null || !robot) return null;
+  const m = reconObjs.children.find(x => x.userData.objId === selObjId); if(!m) return null;
+  world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
+  const W = world.matrixWorld.clone(), Wi = W.clone().invert(), B = robot.matrixWorld.clone(), Bi = B.clone().invert();
+  const prev = m.matrix.clone(), P0i = poseOf(frames[0]).invert();
+  m.userData.animating = true; m.matrixAutoUpdate = false;
+  return f => { m.matrix.copy(Wi).multiply(B).multiply(poseOf(f)).multiply(P0i).multiply(Bi).multiply(W).multiply(prev); m.matrixWorldNeedsUpdate = true; };
+}
 function playSim(frames, speed = 1){      // replay the prediction: virtual robot (simulated joints) + object
   const sim = S?.grasp?.plan?.sim || {}, t0 = performance.now(), T = frames[frames.length - 1][0], z0 = frames[0][3];
+  const follow = speed === 1 ? followMesh(frames) : null;
+  if(follow) ghost.visible = false;
   const mode = speed === 1 ? '실행 예측' : `미리보기 ×${speed}`;
   playing = t0;
   (function step(){
@@ -1755,11 +1811,12 @@ function playSim(frames, speed = 1){      // replay the prediction: virtual robo
     const t = ex?.t !== undefined && S.grasp.stage === 'executing' ? ex.t : (performance.now() - t0) / 1000 * speed;
     if(t > T){
       const f = frames[frames.length - 1]; placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0); playing = null;
+      if(follow){ follow(f); for(const m of reconObjs.children) m.userData.animating = false; }
       setTimeout(() => { if(playing === null){ setGhostQ(null); hud.classList.remove('show'); } }, 2500);
       return;
     }
     const f = frames[Math.min(frames.length - 1, Math.floor(t * 20))];
-    placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0);
+    placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0); follow?.(f);
     requestAnimationFrame(step);
   })();
 }

@@ -65,7 +65,9 @@ class GraspManager:
             reg = {"robot": np.eye(4).ravel().tolist(), "world": np.eye(4).ravel().tolist()}
         reg = {k: _yaw_only(reg[k]) for k in ("robot", "world")}
         self.state = {"registration": reg, "stage": "idle", "error": None, "plan": None, "object": None,
-                      "obj_version": 0, "exec": None}
+                      "obj_version": 0, "exec": None, "virtual_moved": {}}
+        self._vmoved = {}         # [ours] recon object id → 4×4 ARKit-world move done by the virtual robot (real camera)
+        self._sel_oid = None
         self._sel = None          # (points_base, tris, click_base, up_base, T_base_world)
         self._seg = None          # (obj_idx, support, env_idx) when the object came from the reconstruction
         self._obj_mesh = None     # per-object TSDF mesh blob (ARKit world)
@@ -188,6 +190,8 @@ class GraspManager:
             self._execute()
         elif t == "grasp_cancel":
             self._abort.set()
+            self._vmoved.clear()
+            self.state["virtual_moved"] = {}
             vc = getattr(self.cam, "_virtual", None) if self.cam else None
             if vc is not None and (vc.offset or getattr(vc, "yaw", None) or getattr(vc, "rot", None)):   # back to the start
                 vc.offset.clear()
@@ -211,7 +215,18 @@ class GraspManager:
         click = T_bw[:3, :3] @ np.array(c["p_world"], float) + T_bw[:3, 3]
         self._seg = None
         rc = getattr(self.cam, "recon", None)
-        geo = rc.object_geometry(int(c["obj_id"])) if c.get("obj_id") is not None and rc is not None else None
+        self._sel_oid = int(c["obj_id"]) if c.get("obj_id") is not None else None
+        geo = rc.object_geometry(self._sel_oid) if self._sel_oid is not None and rc is not None else None
+        if geo is not None and self._sel_oid in self._vmoved:
+            # moved earlier by the virtual robot (the real one is still where the camera sees it): plan on the moved
+            # copy, and the real one's depth points are not an obstacle
+            from scipy.spatial import cKDTree
+            Mv = self._vmoved[self._sel_oid]
+            Vw0, Tw0, raw0, sup0 = geo
+            dd, _ = cKDTree(np.vstack([Vw0, raw0])).query(v, distance_upper_bound=0.008)
+            v = v[~np.isfinite(dd)]
+            pb = v @ T_bw[:3, :3].T + T_bw[:3, 3]
+            geo = (Vw0 @ Mv[:3, :3].T + Mv[:3, 3], Tw0, raw0 @ Mv[:3, :3].T + Mv[:3, 3], sup0 + Mv[1, 3])
         if geo is not None:
             # [ours] the reconstruction's own split object (completed back side, separate from the board it stands on):
             # its completed surface is what the gripper closes on; scene points on it leave the collision set
@@ -239,7 +254,7 @@ class GraspManager:
         self._obj_world = v[obj_idx].astype(np.float32)
         ob = pb[obj_idx]
         obj = {"points": int(len(obj_idx)), "source": src, "size_mm": (np.ptp(ob, axis=0) * 1000).round(0).tolist(),
-               "centre_base": ob.mean(axis=0).round(3).tolist(), "support_h": round(support, 3)}
+               "centre_base": ob.mean(axis=0).round(3).tolist(), "support_h": round(support, 3), "obj_id": self._sel_oid}
         self._obj_mesh = None
         rc = getattr(self.cam, "recon", None)
         if rc is not None and getattr(rc, "_kf", None):
@@ -442,6 +457,18 @@ class GraspManager:
                 off = vc.offset.get(idx)                     # placed: resting on the same support as before
                 if off is not None:
                     vc.offset[idx] = np.array([off[0], base_off[1], off[2]])
+            if not vw and len(frames) and self._sel_oid is not None and self._seg is not None:
+                # [ours] real camera, virtual robot: the real object did not move — remember where the prediction left
+                # it (world frame), so the console shows it there and the next plan starts from there
+                def pose(f):
+                    P = np.eye(4)
+                    P[:3, :3], P[:3, 3] = _quat_R(f[4:8]), f[1:4]
+                    return P
+                T_bw = self._sel[4]
+                Db = pose(frames[-1]) @ np.linalg.inv(pose(frames[0]))
+                Dw = np.linalg.inv(T_bw) @ Db @ T_bw
+                self._vmoved[self._sel_oid] = Dw @ self._vmoved.get(self._sel_oid, np.eye(4))
+                self.state["virtual_moved"] = {str(k): np.round(M, 5).ravel().tolist() for k, M in self._vmoved.items()}
             self.state.update(stage="done", exec={"label": "완료"})
             self._refresh_changed()
         except Exception as e:
