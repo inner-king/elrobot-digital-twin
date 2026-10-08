@@ -1882,13 +1882,15 @@ const graspAxes = new THREE.AxesHelper(0.06); graspAxes.matrixAutoUpdate = false
 let graspPlanKey = null;
 // [ours] the physics world is always on with the virtual robot: built once objects are committed, rebuilt (after 3 s
 // of the same state, never mid-plan / mid-run) when the committed set or the registration changes
-let worldKey = null, worldPend = null, lastGraspErr = null, lastGraspWarn = null;
+let worldKey = null, worldPend = null, worldRegSeen = null, lastGraspErr = null, lastGraspWarn = null;
 function startWorld(force){
   if(!robot || S?.robot_source !== 'virtual'){ if(force) toast('물리 세계는 가상 로봇일 때 켜집니다'); return; }
   world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
   send({type: 'grasp_world_start', M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)});
   if(force) toast('물리 세계: 지금 복원 상태로 다시 구성');
 }
+window.__worldDbg = () => ({worldKey, worldPend, robot: !!robot, src: S?.robot_source, stage: S?.grasp?.stage,
+  ids: (S?.camera?.recon?.objects || []).filter(o => o.committed).map(o => o.id), world: S?.grasp?.world});
 function autoWorld(g){
   if(S?.robot_source !== 'virtual' && g.world?.running){ send({type: 'grasp_world_stop'}); return; }   // real robot: off
   if(S?.robot_source !== 'virtual' || !robot) return;
@@ -1897,14 +1899,19 @@ function autoWorld(g){
   // rebuild for a new committed object the world lacks or a moved robot / world — not for one that vanished for a
   // moment (a carried object floats: the reconstruction does not split it off; rebuilding then put it back)
   const have = new Set(g.world?.ids || []), fresh = ids.filter(i => !have.has(i));
-  const key = JSON.stringify([g.world?.running ? fresh : ids, g.registration?.robot, g.registration?.world]);
-  if(g.world?.running && !fresh.length && key === worldKey){ worldPend = null; return; }
+  // a console opened while the world runs takes it over as it is (a reload rebuilt it and reset its state);
+  // only a registration changed since this console saw it, or a new object, rebuild it
+  const regK = JSON.stringify([g.registration?.robot, g.registration?.world]);
+  if(worldRegSeen === null) worldRegSeen = regK;
+  const regChanged = regK !== worldRegSeen;
+  const key = JSON.stringify([g.world?.running ? fresh : ids, regK]);
+  if(g.world?.running && !fresh.length && !regChanged){ worldPend = null; worldKey = key; return; }
   if(key === worldKey && g.world?.error){ worldPend = null; return; }                         // failed for this: no retry loop
   if(g.stage === 'planning' || g.stage === 'executing') return;
   if(worldPend?.key !== key){ worldPend = {key, t: performance.now()}; return; }
   if(performance.now() - worldPend.t < 3000) return;
-  worldPend = null; startWorld(false);
-  worldKey = JSON.stringify([[], g.registration?.robot, g.registration?.world]);   // after a build nothing is fresh
+  worldPend = null; startWorld(false); worldRegSeen = regK;
+  worldKey = JSON.stringify([[], regK]);   // after a build nothing is fresh
 }
 function renderGrasp(){
   const g = S?.grasp; if(!g) return;
