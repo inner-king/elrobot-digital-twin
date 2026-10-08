@@ -457,6 +457,7 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import URDFLoader from 'urdf-loader';
 
 const MOTORS = [
@@ -792,12 +793,26 @@ const camRig = new THREE.Group(); camRig.matrixAutoUpdate = false;
   const zc = a.clone().negate(), xc = new THREE.Vector3().crossVectors(up, zc).normalize();
   camRig.matrix.makeBasis(xc, up, zc).setPosition(0.0016, 0.0244, 0.0599);
 }
-const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.032, 0.006).translate(0, 0, 0.008), new THREE.MeshStandardMaterial({color: 0x2b2f33, roughness: .6}));
-const camLens = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.008, 20).rotateX(Math.PI / 2).translate(0, 0, 0.001), new THREE.MeshStandardMaterial({color: 0x1c7ed6}));
-camRig.add(camBody, camLens);
+// the mount + camera themselves (static/elrobot_camera.glb: CameraMount_square32mm + UVC_Camera from ElRobot.stp,
+// Apache-2.0, already in the gripper link frame — they touch the gripper base / each other within 0.01 mm)
+let camModel = null;
+// (cable and connector behind the camera board dropped; printed mount = the robot's body material, camera = servo's)
+new GLTFLoader().load('/static/elrobot_camera.glb', g => {
+  camModel = g.scene;
+  camModel.traverse(o => {
+    if(!o.isMesh) return;
+    let n = o; while(n && !/camera_mount|uvc_camera/.test(n.name)) n = n.parent;
+    o.material = /camera_mount/.test(n?.name || o.name) ? MAT.body : MAT.servo;
+    o.geometry = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;   // flat facets, like the robot's STL parts
+    o.geometry.deleteAttribute('color'); o.geometry.computeVertexNormals();
+    o.castShadow = o.receiveShadow = true;
+    o.userData.overlay = true;               // paintRobot leaves it alone (it repaints every robot mesh each frame)
+  });
+});
 function mountCamRig(){                      // onto the gripper link once the robot model is loaded
   const g = robot?.links?.Gripper_Base_v1_1;
   if(g && camRig.parent !== g) g.add(camRig);
+  if(g && camModel && camModel.parent !== g) g.add(camModel);
   return !!g;
 }
 let insetsOn = true, insetsReady = false;     // ready once the whole module ran (the gizmo is declared further down)
@@ -818,7 +833,7 @@ function insetPose(kind){
 function renderInsets(){
   if(!insetsOn) return;
   const cr = renderer.domElement.getBoundingClientRect();
-  const hide = [gizmo, phone, camRig];
+  const hide = [gizmo, phone, camRig, ...(camModel ? [camModel] : [])];
   const was = hide.map(o => o.visible);
   hide.forEach(o => o.visible = false);
   renderer.setScissorTest(true);
@@ -1532,6 +1547,7 @@ function setGizmo(target, mode){
 }
 // ---- [ours] object place target: the clicked object's completed mesh as a semi-transparent copy the gizmo moves
 // along the floor / turns about the vertical; '옮기기 실행' asks the robot to make it real (grasp_place)
+const REACH_WARN_M = 0.40;
 const TGT_MAT = new THREE.MeshStandardMaterial({color: 0x1c7ed6, transparent: true, opacity: 0.38, depthWrite: false, roughness: .6});
 const placeTgt = {pivot: null, objId: null, c: null, sent: false,
   moved(){ const p = this.pivot; return !!p && (p.position.distanceTo(this.c) > 0.002 || p.quaternion.angleTo(new THREE.Quaternion()) > 0.01); }};
@@ -1584,7 +1600,18 @@ function renderPlacebar(){
   const p = placeTgt.pivot, o = objInfo(placeTgt.objId), d = p.position.clone().sub(placeTgt.c);
   placebar.querySelector('[data-p="name"]').textContent = `${o?.label ? o.label.name : '물체'} #${placeTgt.objId}`;
   const lift = d.y > 0.015 ? ' · 공중: 잡고 유지' : '';
-  placebar.querySelector('[data-p="d"]').textContent = `Δx ${(d.x * 100).toFixed(1)} · Δy ${(d.y * 100).toFixed(1)} · Δz ${(d.z * 100).toFixed(1)} cm · ${THREE.MathUtils.radToDeg(p.quaternion.angleTo(new THREE.Quaternion())).toFixed(0)}°${lift}`;
+  // [ours] reach check while dragging: ElRobot's TCP gets at most 43.4 cm from its shoulder (joint 2; 60 000 random
+  // joint samples, any orientation) — with the grasp orientation fixed, about 40 cm is the practical edge
+  let reach = '';
+  if(robot){
+    world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
+    const sh = new THREE.Vector3(-0.02, 0.042, 0.091).applyMatrix4(robot.matrixWorld);
+    const tp = p.position.clone().applyMatrix4(world.matrixWorld);
+    const r = tp.distanceTo(sh);
+    TGT_MAT.color.setHex(r > REACH_WARN_M ? 0xe03131 : 0x1c7ed6);
+    if(r > REACH_WARN_M) reach = ` · ⚠ 어깨에서 ${Math.round(r * 100)} cm — 팔이 닿지 않을 수 있음 (약 ${Math.round(REACH_WARN_M * 100)} cm까지)`;
+  }
+  placebar.querySelector('[data-p="d"]').textContent = `Δx ${(d.x * 100).toFixed(1)} · Δy ${(d.y * 100).toFixed(1)} · Δz ${(d.z * 100).toFixed(1)} cm · ${THREE.MathUtils.radToDeg(p.quaternion.angleTo(new THREE.Quaternion())).toFixed(0)}°${lift}${reach}`;
   const go = placebar.querySelector('[data-p="go"]'); go.disabled = placeTgt.sent;
 }
 gzbar.addEventListener('click', e => {
