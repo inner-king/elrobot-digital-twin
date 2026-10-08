@@ -90,6 +90,11 @@ main{position:relative;background:#cfd8e2;overflow:hidden}
 .hint span{display:inline-flex;align-items:center;gap:3px}.hint .ic{font-size:15px}
 .simhud{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);display:none;gap:6px;align-items:center;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:999px;padding:5px 8px;box-shadow:0 4px 14px rgba(20,24,30,.08)}
 .simhud.show{display:flex}
+.insets{position:absolute;right:12px;bottom:34px;display:flex;gap:8px;pointer-events:none}
+.insets .iv{width:min(232px,24vw);aspect-ratio:4/3;border:1px solid var(--line2);border-radius:8px;position:relative;background:transparent;box-shadow:0 4px 14px rgba(20,24,30,.12)}
+.insets .iv span{position:absolute;left:6px;top:4px;font:600 11px var(--sans);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.insets .iv em{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:12px var(--sans);color:var(--ink3);font-style:normal}
+.insets.off .iv{display:none}
 .gzbar{position:absolute;left:12px;top:12px;display:none;gap:4px;align-items:center;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:4px 6px;box-shadow:0 4px 14px rgba(20,24,30,.08);font:12px var(--sans)}
 .gzbar.show{display:flex}
 .gzbar .k{font:600 12px var(--sans);padding:2px 6px;color:var(--ink2)}
@@ -272,9 +277,11 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
 
   <main>
     <div id="view"></div>
-    <div class="vbtns"><button class="icon" id="cam-reset" title="시점 초기화"><span class="ic">center_focus_strong</span></button></div>
+    <div class="vbtns"><button class="icon" id="cam-reset" title="시점 초기화"><span class="ic">center_focus_strong</span></button>
+      <button class="icon" id="inset-toggle" title="월드 카메라 · 로봇 1인칭 보조 화면"><span class="ic">picture_in_picture</span></button></div>
     <svg class="vgizmo" id="vgizmo" viewBox="-46 -46 92 92"></svg>
     <div class="olabels" id="olabels"></div>
+    <div class="insets" id="insets"><div class="iv" data-iv="world"><span>월드 카메라 (iPhone)</span><em></em></div><div class="iv" data-iv="robot"><span>로봇 1인칭 (집게)</span><em></em></div></div>
     <div class="gzbar" id="gzbar"><span class="ic" data-z="icon">open_with</span><span class="k" data-z="kind"></span>
       <button class="small" data-z="translate" title="이동 (W)"><span class="ic">open_with</span>이동 W</button>
       <button class="small" data-z="rotate" title="회전 (E)"><span class="ic">rotate_right</span>회전 E</button>
@@ -769,7 +776,50 @@ function drawLabels(){
   }
   for(const el of [...box.children]) if(!seen.has(el.dataset.k)) el.remove();
 }
-(function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); })();
+// [ours] picture-in-picture views (bottom right): the iPhone's own view and a camera at the gripper looking along its
+// approach (the TCP sits 90 mm along the gripper body's +y, elrobot.xml site "tcp"; eye between the jaws at 62 mm —
+// at 45 mm it sat inside the gripper body's mesh)
+const camWorld = new THREE.PerspectiveCamera(52, 4 / 3, 0.02, 30), camRobot = new THREE.PerspectiveCamera(70, 4 / 3, 0.015, 10);
+camWorld.matrixAutoUpdate = camRobot.matrixAutoUpdate = false;
+const EYE = new THREE.Matrix4().makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0))
+  .setPosition(0.0018, 0.062, 0.0028);                                  // camera −z = gripper +y (approach), up = +z; just past the palm
+let insetsOn = true, insetsReady = false;     // ready once the whole module ran (the gizmo is declared further down)
+try { insetsOn = localStorage.getItem('elrobot.insets') !== '0'; } catch(e) {}
+const insetEl = $('#insets'); insetEl.classList.toggle('off', !insetsOn);
+$('#inset-toggle').addEventListener('click', () => { insetsOn = !insetsOn; insetEl.classList.toggle('off', !insetsOn); try { localStorage.setItem('elrobot.insets', insetsOn ? '1' : '0'); } catch(e) {} });
+function insetPose(kind){
+  if(kind === 'world'){
+    if(!camInfo.T) return null;
+    world.updateMatrixWorld(true);
+    return camWorld.matrixWorld.multiplyMatrices(world.matrixWorld, camInfo.T), camWorld;
+  }
+  const g = robot?.links?.Gripper_Base_v1_1; if(!g) return null;
+  g.updateMatrixWorld(true);
+  camRobot.matrixWorld.multiplyMatrices(g.matrixWorld, EYE);
+  return camRobot;
+}
+function renderInsets(){
+  if(!insetsOn) return;
+  const cr = renderer.domElement.getBoundingClientRect();
+  const hide = [gizmo, phone];
+  const was = hide.map(o => o.visible);
+  hide.forEach(o => o.visible = false);
+  renderer.setScissorTest(true);
+  for(const el of insetEl.querySelectorAll('.iv')){
+    const kind = el.dataset.iv, cam = insetPose(kind);
+    el.querySelector('em').textContent = cam ? '' : (kind === 'world' ? 'iPhone 자세 없음' : '로봇 모델 없음');
+    if(!cam) continue;
+    const r = el.getBoundingClientRect(), x = r.left - cr.left, y = cr.bottom - r.bottom;
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    cam.aspect = r.width / r.height; cam.updateProjectionMatrix();
+    renderer.setViewport(x, y, r.width, r.height); renderer.setScissor(x, y, r.width, r.height);
+    renderer.render(scene, cam);
+  }
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, cr.width, cr.height);
+  hide.forEach((o, i) => o.visible = was[i]);
+}
+(function loop(){ requestAnimationFrame(loop); controls.update(); drawGizmo(); drawLabels(); renderer.render(scene, camera); if(insetsReady) renderInsets(); })();
 
 // ---------------------------------------------------------------- slider views (left accordion + every 조작 panel)
 const SLIDER_HTML = `<div class="slider-wrap"><div class="live-mark"></div><input type="range" min="0" max="4095" disabled></div>
@@ -1838,6 +1888,7 @@ function playPreview(){
     requestAnimationFrame(step);
   })();
 }
+insetsReady = true;
 </script>
 </body>
 </html>

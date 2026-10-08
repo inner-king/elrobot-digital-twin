@@ -270,6 +270,9 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
         mesh_cm = mesh.copy()
         mesh_cm.apply_scale(100.0)                     # TACO convention: mesh in cm, ROI points in m
         cands = gt.sample_antipodal(mesh_cm, roi, nrm, rng)
+        # closing axis along the approach: TACO's place_gripper has no frame for it (NaN — and NaN points never hit a
+        # hull, so they counted as collision-free); not a top-down grasp anyway
+        cands = [c for c in cands if abs(c["axis"] @ approach) < 0.95]
         ref = mesh.center_mass if mesh.is_volume else centre
         out["tried"].append({"surface": label, "candidates": len(cands)})
         if not cands:
@@ -277,6 +280,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
         # [TACO] best_grasp ranking (distance to the reference centre − 0.02·quality), top 60, ROLLS each
         ranked = sorted(cands, key=lambda c: np.linalg.norm(c["centre"] - ref) - 0.02 * c["quality"])[:60]
         n_free = n_ik = 0
+        why = {"집게 충돌": 0, "접근 충돌": 0, "파지 IK": 0, "접근 직선": 0, "들기 직선": 0}
         for c in ranked:
             gear = (gt.GRIPPER_SPAN - c["width"] - 2 * gt.CLEARANCE_MM / 1000) * gt.GEAR_PER_METRE
             near = collide[np.linalg.norm(collide - c["centre"], axis=1) < COLLISION_RADIUS_M]
@@ -285,14 +289,17 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                 frame[:3, 3] -= depth * frame[:3, 1]           # [ours] pad position on the object (GRASP_DEPTH_M)
                 local = (near - frame[:3, 3]) @ frame[:3, :3]
                 if gt.hull_hits(local, hulls, 0.0) or gt.hull_hits(local, hulls, gear):
+                    why["집게 충돌"] += 1
                     continue                           # open jaws and closed-to-contact jaws must both be free
                 R, p = frame[:3, :3], frame[:3, 3]
                 if not approach_clear(collide, frame, hulls, gt, backoff=PREGRASP_OPTIONS_M[-1]):
+                    why["접근 충돌"] += 1
                     continue
                 n_free += 1
                 ok = lambda e: e[0] <= IK_POS_TOL and e[1] <= IK_ROT_TOL
                 q_g, pe, re = ik(p, R, np.asarray(q_now[:7], float))      # the grasp itself first
                 if not ok((pe, re)):
+                    why["파지 IK"] += 1
                     continue
                 pre_sol = None
                 for b in PREGRASP_OPTIONS_M:                                # longest reachable, clear back-off
@@ -321,6 +328,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                         lift_sol = (lh, path[0], path[1])
                         break
                 if pre_sol is None or lift_sol is None:
+                    why["접근 직선" if pre_sol is None else "들기 직선"] += 1
                     continue
                 qs = [pre_sol[1][0], q_g, lift_sol[1][-1]]
                 errs = [pre_sol[2], (pe, re), lift_sol[2]]
@@ -335,7 +343,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                            q_descend=[q.round(4).tolist() for q in pre_sol[1]], q_rise=[q.round(4).tolist() for q in lift_sol[1]],
                            obj_idx=obj_idx, ms=round((time.time() - t0) * 1000))
                 yield dict(out)
-        out["tried"][-1].update(collision_free=n_free, ik_ok=n_ik)
+        out["tried"][-1].update(collision_free=n_free, ik_ok=n_ik, fail=why)
     out = {k: out[k] for k in ("object_points", "support_height", "object_size_m", "tried", "support_z")}
     out.update(obj_idx=obj_idx, ms=round((time.time() - t0) * 1000), error="충돌 없고 IK가 닿는 파지를 찾지 못했습니다")
     yield out
