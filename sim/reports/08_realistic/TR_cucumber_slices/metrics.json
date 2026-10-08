@@ -1,0 +1,187 @@
+{
+  "test": "TR",
+  "tag": "cucumber_slices",
+  "multifield": true,
+  "mf_mu": 0.0,
+  "mf_fill": 0.75,
+  "grid_density": 256,
+  "dx_mm": 3.90625,
+  "particle_mm": 2.5,
+  "speed_mps": 0.03,
+  "n_steps": 7371,
+  "sim_time_s": 7.371,
+  "wall_s": 405.1,
+  "wall_ms_per_step": 54.95,
+  "substeps": 124,
+  "vram_used_gb_device": 1.38,
+  "particles": {
+    "flesh": 5712,
+    "skin": 1976
+  },
+  "nan": false,
+  "knife": {
+    "thickness": 0.0015,
+    "length": 0.08480001000000001,
+    "bevel_height": 0.006,
+    "edge_width": 0.0002,
+    "coup_friction": 0.3,
+    "coup_softness": 0.0005
+  },
+  "material": {
+    "E": 2500000.0,
+    "nu": 0.37,
+    "rho": 950,
+    "yield_stress": 300000.0,
+    "color": [
+      0.776,
+      0.835,
+      0.725
+    ]
+  },
+  "two_layer": true,
+  "layer_info": {
+    "skin_volume": 2.973169015514742e-05,
+    "flesh_volume": 8.983474232643252e-05,
+    "outer_volume": 0.00011956643425708187,
+    "skin_thickness_used_m": 0.0025
+  },
+  "nn_spacing_mm": 2.3665106543909884,
+  "min_edge_z_mm": 0.4799286543857306,
+  "track_err_max_mm": 1.6725903402898812,
+  "pass_penetrate": true,
+  "food_top_mm": 34.75700318813324,
+  "full_depth_mm": 33.7621308863163,
+  "TR": {
+    "traj": "reports/03_import/demo_cucumber_slices/traj_sim.npz",
+    "duration_s": 6.9190000000000005,
+    "n_strokes": 4,
+    "tilt_dropped_deg_max": 5.169625169095788,
+    "tilt_dropped_deg_mean": 2.2284449713787304,
+    "below_board_clamped_steps": 1096,
+    "marks": [
+      {
+        "step": 1206,
+        "phase": "cut1",
+        "x_mm": 30.72850799560547,
+        "y_mm": -2.9983763694763184,
+        "yaw_deg": -0.9640129804611206
+      },
+      {
+        "step": 2766,
+        "phase": "cut2",
+        "x_mm": 19.121234893798828,
+        "y_mm": -7.914740562438965,
+        "yaw_deg": -0.10447275638580322
+      },
+      {
+        "step": 4412,
+        "phase": "cut3",
+        "x_mm": 8.71371841430664,
+        "y_mm": 4.348392486572266,
+        "yaw_deg": 3.3072967529296875
+      },
+      {
+        "step": 6019,
+        "phase": "cut4",
+        "x_mm": -3.8343653678894043,
+        "y_mm": 1.660739541053772,
+        "yaw_deg": 4.366799831390381
+      }
+    ],
+    "strokes": [
+      {
+        "stroke": 1,
+        "t_s": [
+          0.438,
+          1.688
+        ],
+        "min_edge_z_mm": 0.5008095176890492,
+        "reached_board": true,
+        "mean_resist_N": 4.7028419753834605,
+        "max_resist_N": 23.536180877685545,
+        "max_model_force_N": 21.42510990084604
+      },
+      {
+        "stroke": 2,
+        "t_s": [
+          2.0460000000000003,
+          3.228
+        ],
+        "min_edge_z_mm": 0.5548360641114414,
+        "reached_board": true,
+        "mean_resist_N": 7.213840220432394,
+        "max_resist_N": 26.618603324890138,
+        "max_model_force_N": 25.06069642827664
+      },
+      {
+        "stroke": 3,
+        "t_s": [
+          3.625,
+          4.873
+        ],
+        "min_edge_z_mm": 0.4913668381050229,
+        "reached_board": true,
+        "mean_resist_N": 8.24122498771892,
+        "max_resist_N": 28.818519592285156,
+        "max_model_force_N": 24.332691958858394
+      },
+      {
+        "stroke": 4,
+        "t_s": [
+          5.284,
+          6.471
+        ],
+        "min_edge_z_mm": 0.4799286543857306,
+        "reached_board": true,
+        "mean_resist_N": 9.989290643652874,
+        "max_resist_N": 35.228564453125,
+        "max_model_force_N": 25.931069943510845
+      }
+    ]
+  },
+  "expected_pieces": null,
+  "components_r1.25": {
+    "n": 2,
+    "sizes": [
+      4175,
+      3508,
+      3,
+      1,
+      1
+    ]
+  },
+  "components_r1.6": {
+    "n": 1,
+    "sizes": [
+      7688
+    ]
+  },
+  "pass_pieces": null,
+  "volume_change_pct": -0.022494792938232422,
+  "pass_volume": true,
+  "cut_force_model": {
+    "G_c_Npm": 351.3,
+    "tau_Pa": 5064.2,
+    "max_L_mm": 42.40000500000001,
+    "max_A_cm2": 31.375,
+    "max_F_cut_N": 14.853132443510844,
+    "max_F_fric_N": 15.8889275
+  },
+  "flags": {
+    "inside_sep": false,
+    "cut_force": true,
+    "z_force_limit": null,
+    "hold_box": [
+      "-0.0369,-0.0015,0.0487,0.026,0.05,0.015"
+    ],
+    "grip": true,
+    "sep_damp": [
+      300.0,
+      0.06,
+      0.015
+    ],
+    "board_collision_offset_dx": 1.0,
+    "z_force_budget": null,
+    "cut_x": 0.0
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "test": "TR",
+  "tag": "robot_carrot",
+  "multifield": true,
+  "mf_mu": 0.0,
+  "mf_fill": 0.75,
+  "grid_density": 256,
+  "dx_mm": 3.90625,
+  "particle_mm": 2.5,
+  "speed_mps": 0.03,
+  "n_steps": 9161,
+  "sim_time_s": 9.161,
+  "wall_s": 643.1,
+  "wall_ms_per_step": 70.2,
+  "substeps": 199,
+  "vram_used_gb_device": 1.91,
+  "particles": {
+    "flesh": 1784,
+    "skin": 1222
+  },
+  "nan": false,
+  "knife": {
+    "thickness": 0.0015,
+    "length": 0.08,
+    "bevel_height": 0.006,
+    "edge_width": 0.0002,
+    "coup_friction": 0.1,
+    "coup_softness": 0.0005
+  },
+  "material": {
+    "E": 2000000.0,
+    "nu": 0.45,
+    "rho": 630,
+    "yield_stress": 300000.0,
+    "color": [
+      0.97,
+      0.55,
+      0.15
+    ]
+  },
+  "two_layer": true,
+  "layer_info": {
+    "skin_volume": 1.8761619781836556e-05,
+    "flesh_volume": 2.760794666930089e-05,
+    "outer_volume": 4.636956652322757e-05,
+    "skin_thickness_used_m": 0.0025
+  },
+  "nn_spacing_mm": 2.278523734055848,
+  "min_edge_z_mm": 0.4965883563272655,
+  "track_err_max_mm": 0.4272034568393208,
+  "pass_penetrate": true,
+  "food_top_mm": 24.9268040060997,
+  "full_depth_mm": 23.887800867669284,
+  "TR": {
+    "traj": "reports/09_elrobot_twin/robot_cut/import/kitchen_robot_cut_carrot/traj_sim.npz",
+    "duration_s": 8.709,
+    "n_strokes": 2,
+    "tilt_dropped_deg_max": 0.0,
+    "tilt_dropped_deg_mean": 0.0,
+    "below_board_clamped_steps": 2653,
+    "marks": [
+      {
+        "step": 2461,
+        "phase": "cut1",
+        "x_mm": 58.94575119018555,
+        "y_mm": -2.232121467590332,
+        "yaw_deg": -0.006821523420512676
+      },
+      {
+        "step": 6205,
+        "phase": "cut2",
+        "x_mm": 44.679935455322266,
+        "y_mm": -3.8221850395202637,
+        "yaw_deg": -1.668171171331778e-05
+      }
+    ],
+    "strokes": [
+      {
+        "stroke": 1,
+        "t_s": [
+          1.227,
+          4.043
+        ],
+        "min_edge_z_mm": 0.504331779666245,
+        "reached_board": true,
+        "mean_resist_N": 1.2273451959746042,
+        "max_resist_N": 10.57776165008545,
+        "max_model_force_N": 11.188132530789408,
+        "stall_steps": 0
+      },
+      {
+        "stroke": 2,
+        "t_s": [
+          4.971,
+          7.795
+        ],
+        "min_edge_z_mm": 0.4965883563272655,
+        "reached_board": true,
+        "mean_resist_N": 0.8979146565844085,
+        "max_resist_N": 9.951776885986327,
+        "max_model_force_N": 11.04951045112542,
+        "stall_steps": 0
+      }
+    ]
+  },
+  "expected_pieces": null,
+  "components_r1.25": {
+    "n": 2,
+    "sizes": [
+      2469,
+      482,
+      21,
+      14,
+      3,
+      2,
+      1,
+      1
+    ]
+  },
+  "components_r1.6": {
+    "n": 1,
+    "sizes": [
+      3006
+    ]
+  },
+  "pass_pieces": null,
+  "volume_change_pct": -0.009906291961669922,
+  "pass_volume": true,
+  "cut_force_model": {
+    "G_c_Npm": 312.4,
+    "tau_Pa": 4716.9,
+    "max_L_mm": 26.25,
+    "max_A_cm2": 11.1875,
+    "max_F_cut_N": 7.809826339727969,
+    "max_F_fric_N": 5.277031875
+  },
+  "flags": {
+    "inside_sep": false,
+    "cut_force": true,
+    "z_force_limit": null,
+    "hold_box": [
+      "-0.0522,0,0.0258,0.047,0.05,0.015"
+    ],
+    "grip": true,
+    "sep_damp": [
+      300.0,
+      0.06,
+      0.015
+    ],
+    "board_collision_offset_dx": 1.0,
+    "z_force_budget": 12.0,
+    "cut_x": 0.0
+  },
+  "stall_steps": 0,
+  "stall_first_depth_mm": null
+}

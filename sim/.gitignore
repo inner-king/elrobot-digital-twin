@@ -1,0 +1,10 @@
+# 받은·만든 데이터(복원 메쉬, 사진, 시연 궤적), 외부 저장소, 실행 때 만들어지는 칼 URDF
+data/
+third_party/
+assets/urdf/
+__pycache__/
+*.pyc
+# 다시 만들 수 있는 큰 중간 파일(입자 기록, 힘 로그, 메쉬)
+reports/**/*.npz
+reports/**/*.obj
+reports/**/_baseline_cache/

@@ -1,0 +1,34 @@
+# 식재료별 MPM ElastoPlastic 물성 + 단면 색 + 절단 저항 모델 계수.
+# E: 영률(Pa), nu: 푸아송비, rho: 밀도(kg/m^3), yield_stress: von Mises 항복응력(Pa)
+# skin: 껍질 물체(과육보다 항복응력 높게), flesh: 과육, color: RGB 0~1
+# cucumber 과육 E·nu·rho: DiSECt 재질값. 항복응력·껍질은 가정값(보정 안 함, 껍질 = 과육의 2배 E·3배 항복응력).
+# MPM 은 잘리는 모양·분리만 맡는다. 칼에 걸리는 절단 저항은 cut_toughness_Npm(G_c)·face_friction_Pa(τ) 의
+#   힘 모델(--cut_force)이 맡고, 두 계수는 scripts/04_fit_cut_force.py 로 DiSECt 힘 곡선에 맞춘 값이다(README.md 4장).
+# knife_friction: 칼-재료 결합 마찰(MPM 변형용 물리값).
+cucumber:
+  flesh: {E: 2.5e6, nu: 0.37, rho: 950, yield_stress: 3.0e5, color: [0.80, 0.88, 0.62]}
+  skin:  {E: 5.0e6, nu: 0.37, rho: 950, yield_stress: 9.0e5, color: [0.18, 0.38, 0.15]}
+  skin_thickness_m: 0.0015
+  cut_toughness_Npm: 351.3   # 절단 저항 모델(04_fit_cut_force.py, cylinder_fine)
+  face_friction_Pa: 5064.2
+  knife_friction: 0.3
+# apple·potato 과육 E·nu·rho: DiSECt 재질값. 항복응력·껍질은 가정값(보정 안 함)
+apple:
+  flesh: {E: 3.0e6, nu: 0.17, rho: 787, yield_stress: 3.0e5, color: [0.96, 0.92, 0.75]}
+  skin:  {E: 6.0e6, nu: 0.17, rho: 787, yield_stress: 9.0e5, color: [0.70, 0.08, 0.08]}
+  skin_thickness_m: 0.001
+  cut_toughness_Npm: 250.8   # 절단 저항 모델(04_fit_cut_force.py, cylinder_fine_sphereprops)
+  face_friction_Pa: 10494.0
+potato:
+  flesh: {E: 2.0e6, nu: 0.45, rho: 630, yield_stress: 3.0e5, color: [0.95, 0.90, 0.68]}
+  skin:  {E: 4.0e6, nu: 0.45, rho: 630, yield_stress: 9.0e5, color: [0.60, 0.45, 0.28]}
+  skin_thickness_m: 0.001
+  cut_toughness_Npm: 312.4   # 절단 저항 모델(04_fit_cut_force.py, cylinder_fine_prismprops)
+  face_friction_Pa: 4716.9
+# 보정 전 기본값(category 를 모를 때)
+default:
+  flesh: {E: 3.0e5, nu: 0.3, rho: 1000, yield_stress: 3.0e4, color: [0.90, 0.85, 0.70]}
+  skin:  {E: 6.0e5, nu: 0.3, rho: 1000, yield_stress: 9.0e4, color: [0.40, 0.30, 0.20]}
+  skin_thickness_m: 0.0015
+  cut_toughness_Npm: 350.0   # 보정 안 한 기본값(오이 근처)
+  face_friction_Pa: 5000.0

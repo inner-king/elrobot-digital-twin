@@ -1,0 +1,145 @@
+{
+  "object_id": "kitchen_robot_cut_carrot",
+  "meta": {
+    "object_id": "kitchen_robot_cut_carrot",
+    "source": "elrobot-digital-twin camera/recon.py — 가상 주방을 가상 카메라 한 바퀴(360°)로 찍어 복원(원래 메쉬 안 씀)",
+    "category": "potato",
+    "units": "m",
+    "up_axis": "z",
+    "frame": "world",
+    "T_world_object": [
+      [
+        -0.999468,
+        0.032621,
+        0.0,
+        0.289383
+      ],
+      [
+        -0.032621,
+        -0.999468,
+        0.0,
+        -0.030226
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        0.017153
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "scale_checked": false,
+    "recon_method": "TSDF 3mm + 완성(carved)",
+    "shape_note": "이름은 정답 위치로 붙임(그쪽은 YOLOE 인식이 맡음); 당근 물성이 없어 감자 값을 빌림(보정 안 됨)",
+    "color_skin": [
+      0.545,
+      0.29,
+      0.129
+    ],
+    "color_flesh": [
+      0.97,
+      0.55,
+      0.15
+    ],
+    "mesh_fix": "Taubin 3번 다듬고 부피 되돌림(복원 겉면 돌기 때문에 입자 덩어리가 떨어지는 것 방지)",
+    "hold_box": [
+      [
+        -0.0522,
+        0.0,
+        0.0258,
+        0.047,
+        0.05,
+        0.015
+      ]
+    ],
+    "hold_box_note": "썰지 않는 쪽 끝을 붙잡는 상자(정규화 좌표, m). 로봇 장면에서는 그리지 않음(고정구 대용)",
+    "task": "ElRobot 이 칼 손잡이를 위에서 쥐고, 복원된 당근을 로봇 쪽 끝에서 2.0·3.4 cm 자리를 톱질로 두 번 썰기",
+    "knife_grip": "집게 TCP = 손잡이 가운데, 접근 = 칼 −z(아래), 닫힘 = 칼 x(칼날 면 법선)",
+    "robot_grip": {
+      "alpha_deg": 45.0,
+      "s_m": 0.0,
+      "side_deg": 0.0,
+      "T_base": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    }
+  },
+  "raw": {
+    "n_vertices": 3397,
+    "n_components": 1,
+    "extents_raw_units": [
+      0.15723,
+      0.0271,
+      0.02611
+    ],
+    "watertight": true
+  },
+  "normalized": {
+    "extents_m": [
+      0.1574,
+      0.0261,
+      0.0261
+    ],
+    "volume_cm3": 46.37,
+    "watertight": true,
+    "remeshed": false
+  },
+  "parts": {
+    "skin": "reports/09_elrobot_twin/robot_cut/import/kitchen_robot_cut_carrot/parts/skin.obj",
+    "flesh": "reports/09_elrobot_twin/robot_cut/import/kitchen_robot_cut_carrot/parts/flesh.obj"
+  },
+  "parts_volume_cm3": {
+    "skin_volume": 18.76,
+    "flesh_volume": 27.61,
+    "outer_volume": 46.37
+  },
+  "parts_volume_check": 1.0,
+  "traj": {
+    "n_src": 872,
+    "fps": 100.0,
+    "n_sim": 8710,
+    "duration_s": 8.709,
+    "start_pos_m": [
+      0.0587,
+      0.0,
+      0.0761
+    ],
+    "end_pos_m": [
+      0.0587,
+      0.0,
+      0.0761
+    ]
+  },
+  "warnings": [
+    "scale_checked=false: 실물 치수 비교 전",
+    "껍질 1.0mm 는 입자(2.5mm)보다 얇아 2.5mm 로 올림"
+  ]
+}

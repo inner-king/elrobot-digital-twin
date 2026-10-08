@@ -1,0 +1,45 @@
+# 절단 씬 기본 설정. 길이 단위 m, 시간 s.
+# MPM 격자 크기 dx = 1 / grid_density. 128 이면 7.8mm 라 지름 3cm 오이에 칸이 4개뿐이므로
+# 기본은 256(3.9mm)으로 두고 T5 에서 128/256/384/512 를 비교한다.
+mpm:
+  grid_density: 256
+  enable_CPIC: true
+  # 시뮬레이션 영역은 도마 위 식재료 주변으로만 잡는다(영역 크기가 곧 계산량).
+  # 아래 경계 z 는 바닥(z=0)보다 3칸 이상 아래여야 안전 여백이 바닥을 가리지 않는다.
+  lower_bound: [-0.06, -0.05, -0.03]
+  upper_bound: [0.06, 0.05, 0.06]
+sim:
+  step_dt: 1.0e-3      # 제어·기록 주기
+  substeps: 40         # MPM·강체 내부 시간 간격 = step_dt / substeps = 2.5e-5
+board:                 # 도마 = 바닥 평면(z=0)
+  coup_friction: 1.0
+  coup_softness: 0.0005
+  # 충돌 면을 격자 몇 칸 아래에 둘지. MPM 은 격자점에서만 접촉을 계산해, 떨어진 조각은 도마 면 격자점 영향권(약 1.3칸)
+  # 위에서 멈춰 3mm 쯤 떠 보인다. 1 이면 보이는 도마(z=0)에 닿아 쉰다(합성 시연 재실행 run_realistic.sh 에서 사용).
+  # 기본 0 은 이전 시험(T1~T5, 06·07 결과)과 같게 두려는 것이다.
+  collision_offset_dx: 0.0
+knife:
+  thickness: 0.0015
+  length: 0.08
+  height: 0.035
+  bevel_height: 0.006
+  blade_mass: 0.1
+  coup_friction: 0.1   # 칼-재료 마찰 (보정 대상)
+  coup_softness: 0.0005
+  sdf_cell_size: 0.0003
+  sdf_max_res: 512
+  kp: [20000, 20000, 20000, 200]
+  kv: [400, 400, 400, 4]
+  edge_min_z: 0.0005   # 날 끝이 도마에 닿기 전에 멈추는 높이
+food:                  # 기본 도형
+  shape: cylinder      # cylinder(오이 대용, x축 방향) | sphere(사과 대용)
+  radius: 0.015
+  length: 0.07
+  category: cucumber
+  two_layer: false     # true 면 껍질·과육 두 물체
+  vis_mode: particle   # particle | recon(입자에서 표면을 매 프레임 재구성, 느림)
+camera:
+  res: [640, 480]
+  pos: [0.12, -0.16, 0.10]
+  lookat: [0.0, 0.0, 0.012]
+  fov: 35

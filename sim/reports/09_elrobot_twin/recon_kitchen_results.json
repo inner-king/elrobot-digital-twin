@@ -1,0 +1,42 @@
+{
+ "설명": "가상 주방(그 저장소 virtual_kitchen.py LAYOUT, 메쉬는 data/kitchen)을 그 저장소 가상 카메라로 찍고 그 저장소 recon.py(손대지 않음)로 복원한 결과. 2026-10-08 실행 로그에서 옮김(중간 파일은 /tmp 정리로 사라짐). 배치 변경: 대체 도마 두께 20 mm·yaw 90, 칼 x 0.205→0.17(당근과 닿지 않게). 인식(YOLOE) 없음, 물체 이름은 정답 위치로 붙임.",
+ "지표": {
+  "mean_dist_mm": "복원 겉면 → 정답 겉면 평균 거리(정확도)",
+  "coverage_5mm": "정답 겉면 중 복원 겉면 5 mm 안에 든 비율(빠짐 정도)",
+  "shape": "복원 코드의 안 보인 면 채우기 방식(carved = 여러 방향에서 본 공간 깎기, 나머지는 한쪽만 보고 추정)"
+ },
+ "full_360": {
+  "keyframes": 42,
+  "objects": {
+   "도마": {"mean_dist_mm": 2.5, "rec_mm": [208, 304, 26], "gt_mm": [204, 300, 20], "coverage_5mm": 0.98, "shape": "carved"},
+   "칼": {"mean_dist_mm": 1.7, "rec_mm": [18, 207, 20], "gt_mm": [21, 215, 23], "coverage_5mm": 0.98, "shape": "carved"},
+   "당근": {"mean_dist_mm": 1.7, "rec_mm": [157, 27, 26], "gt_mm": [160, 27, 26], "coverage_5mm": 1.0, "shape": "carved"},
+   "딸기": {"mean_dist_mm": 1.2, "rec_mm": [45, 45, 46], "gt_mm": [45, 45, 46], "coverage_5mm": 1.0, "shape": "carved"},
+   "머그": {"mean_dist_mm": 2.1, "rec_mm": [111, 87, 80], "gt_mm": [114, 93, 81], "coverage_5mm": 0.87, "shape": "carved"},
+   "바나나": {"mean_dist_mm": 1.4, "rec_mm": [78, 192, 36], "gt_mm": [79, 197, 37], "coverage_5mm": 1.0, "shape": "carved"},
+   "사과": {"mean_dist_mm": 1.3, "rec_mm": [77, 77, 72], "gt_mm": [75, 75, 72], "coverage_5mm": 0.98, "shape": "carved"},
+   "냄비": {"mean_dist_mm": 8.6, "rec_mm": [290, 205, 197], "gt_mm": [270, 194, 197], "coverage_5mm": 0.79, "shape": "carved"}
+  }
+ },
+ "sweep_60": {
+  "keyframes": 17,
+  "objects": {
+   "도마": {"mean_dist_mm": 2.9, "rec_mm": [206, 302, 24], "gt_mm": [204, 300, 20], "coverage_5mm": 0.91, "shape": "heightmap"},
+   "칼": {"mean_dist_mm": 2.0, "rec_mm": [20, 206, 22], "gt_mm": [21, 215, 23], "coverage_5mm": 0.96, "shape": "box"},
+   "당근": {"mean_dist_mm": 1.7, "rec_mm": [157, 26, 26], "gt_mm": [160, 27, 26], "coverage_5mm": 1.0, "shape": "mirror"},
+   "딸기": {"mean_dist_mm": 2.0, "rec_mm": [47, 44, 46], "gt_mm": [45, 45, 46], "coverage_5mm": 0.99, "shape": "revolve"},
+   "머그": {"mean_dist_mm": 2.5, "rec_mm": [87, 88, 80], "gt_mm": [114, 93, 81], "coverage_5mm": 0.88, "shape": "revolve"},
+   "바나나": {"mean_dist_mm": 2.5, "rec_mm": [71, 191, 36], "gt_mm": [79, 197, 37], "coverage_5mm": 0.84, "shape": "heightmap"},
+   "사과": {"mean_dist_mm": 1.8, "rec_mm": [77, 76, 72], "gt_mm": [75, 75, 72], "coverage_5mm": 0.97, "shape": "revolve"},
+   "냄비": {"mean_dist_mm": 8.4, "rec_mm": [211, 185, 196], "gt_mm": [270, 194, 197], "coverage_5mm": 0.53, "shape": "revolve"}
+  }
+ },
+ "cuts_T1": {
+  "설명": "--multifield --cut_force --no_baseline(힘 수치는 기준선 빼기 전이라 쓰지 않음), 가운데 한 번 누르기. 당근 물성은 감자 값을 빌림(보정 안 됨).",
+  "recon_carrot": {"penetrate": true, "pieces": 2, "particles": [1968, 918], "volume_change_pct": -0.002, "gap_rest_mm": 17.9, "small_fragments": [10, 9, 9, 9], "wall_s": 162, "mesh_volume_cm3": 46.37},
+  "orig_carrot": {"penetrate": true, "pieces": 2, "particles": [2072, 1073], "volume_change_pct": -0.003, "gap_rest_mm": 1.3, "small_fragments": [2, 1], "wall_s": 150, "mesh_volume_cm3": 48.25},
+  "recon_apple": {"penetrate": true, "pieces": 2, "particles": [8151, 8006], "volume_change_pct": -0.107, "gap_rest_mm": 7.9, "small_fragments": [13, 12, 9, 8], "wall_s": 314, "mesh_volume_cm3": 250.43},
+  "orig_apple": {"penetrate": true, "pieces": 2, "particles": [8060, 7799], "volume_change_pct": -0.107, "gap_rest_mm": 4.9, "small_fragments": [6, 3], "wall_s": 304, "mesh_volume_cm3": 246.6}
+ },
+ "scene_stability": "kitchen_genesis.json, kitchen_recon_full.json, kitchen_recon_sweep.json 참고(놓은 뒤 8초: 이동 mm, 회전 °, 올린 높이 mm)"
+}
