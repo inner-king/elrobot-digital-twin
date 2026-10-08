@@ -262,7 +262,10 @@ def segment_given(points_base, obj_base, support_base, up, gap=0.006):
     e2 = np.cross(up, e1)
     H = np.c_[points_base @ e1, points_base @ e2]
     Ho = np.c_[obj_base @ e1, obj_base @ e2]
-    inside = ((H >= Ho.min(0) - 0.01) & (H <= Ho.max(0) + 0.01)).all(axis=1) & (points_base @ up > support_base @ up + 0.004)
+    # — including the support's own surface there (down to SUPPORT_BAND_M below it): its skirt 1–4 mm up blocked every
+    # deep grasp of a strawberry, leaving fingertip grasps that tipped it over. The support itself is checked as a
+    # plane instead (support_clear)
+    inside = ((H >= Ho.min(0) - 0.01) & (H <= Ho.max(0) + 0.01)).all(axis=1) & (points_base @ up > support_base @ up - SUPPORT_BAND_M)
     rest = points_base[~np.isfinite(d) & ~inside]
     P = np.vstack([rest, obj_base])
     obj_idx = np.arange(len(rest), len(P))
@@ -271,6 +274,93 @@ def segment_given(points_base, obj_base, support_base, up, gap=0.006):
     dist = np.linalg.norm(rest - c, axis=1)
     env_idx = np.nonzero(dist < COLLISION_RADIUS_M + 0.1)[0]
     return P, obj_idx, support, env_idx
+
+
+SUPPORT_BAND_M = 0.006
+# [ours] where a flat pad really touches: not the sampled antipodal pair but the object's widest part within the pad
+# (tcp frame: pads span y −32 … +13 mm, z ±25 mm). A strawberry wider low down was touched by the fingertips (y 13 mm)
+# and squeezed out sideways — 70° tilt, 10 N (the good grasps: contact mid-pad, 117–127 N, 2–4° tilt)
+PAD_Y_M, PAD_Z_M, PAD_TIP_KEEP_M = (-0.032, 0.013), 0.025, 0.006
+
+
+OPEN_JAW_HALF_M, OPEN_MARGIN_M = 0.0255, 0.002   # open jaw faces at ±25.5 mm; what they pass going down keeps 2 mm
+
+
+def jaw_pass_clear(local, backoff):
+    """[ours] descending with open jaws, the fingertips sweep the object from above down to the grasp: every object point
+    in the pads' width and above the tips must stay OPEN_MARGIN_M inside the open faces (a strawberry wider below the
+    grasp height left < 1 mm; the tips caught its bulge and pushed it 12 mm, 39° over)"""
+    sel = (np.abs(local[:, 2]) < PAD_Z_M) & (local[:, 1] < PAD_Y_M[1]) & (local[:, 1] > -backoff - 0.032)
+    return not len(local[sel]) or np.abs(local[sel][:, 0]).max() < OPEN_JAW_HALF_M - OPEN_MARGIN_M
+
+
+def transit_clear(qs, points, hulls, gt, gear=0.0, n=12):
+    """[ours] the free joint-space move (open jaws) between waypoints keeps the gripper out of the scene points
+    (unchecked before: a roll-0 grasp's jaws knocked the strawberry over on the way to the pre-grasp)"""
+    for a, b in zip(qs[:-1], qs[1:]):
+        for s_ in np.linspace(0, 1, n + 1)[1:-1]:
+            F = _tcp_frame(a + (b - a) * s_)
+            o = F[:3, 3]
+            near = points[np.linalg.norm(points - o, axis=1) < COLLISION_RADIUS_M]
+            if len(near) and gt.hull_hits((near - o) @ F[:3, :3], hulls, gear):
+                return False
+    return True
+
+
+TRANSIT_VIA_M = (0.06, 0.12)
+FINGER_TIP_M, PRE_CLEAR_M = 0.013, 0.025      # tips 13 mm past the tcp; 25 mm covers the servos' ≈10 mm sag
+
+
+def pad_contact_y(local, width):
+    """tcp-frame y where each jaw face first meets the object (mean of its 3 % outermost points per side) → (y-, y+)"""
+    sel = (np.abs(local[:, 2]) < PAD_Z_M) & (local[:, 1] > PAD_Y_M[0]) & (local[:, 1] < PAD_Y_M[1])
+    L = local[sel]
+    out = []
+    for sgn in (-1, 1):
+        side = L[L[:, 0] * sgn > 0]
+        if len(side) < 5:
+            out.append(None)
+            continue
+        k = max(3, len(side) // 33)
+        far = side[np.argsort(-np.abs(side[:, 0]))[:k]]
+        out.append(float(far[:, 1].mean()))
+    return tuple(out)
+SUPPORT_CLEAR_M = 0.002       # jaws stay this far above the support plane
+_GRIP_PTS = None
+
+
+def _grip_pts(gt):
+    """the gripper's collision vertices in the tcp frame, as gripper_hulls builds them: [(points, slide axis, coef)]"""
+    global _GRIP_PTS
+    if _GRIP_PTS is None:
+        import json
+        import trimesh
+        spec = json.load(open(ROOT / "taco_viewer" / "robot" / "gripper.json"))
+        tcp = np.array(spec["tcp"])
+        out, body = [], []
+        for part in spec["parts"]:
+            off = np.array(part["pos"]) - tcp
+            if "slide" in part:
+                mm = trimesh.load(ROOT / "elrobot_mujoco" / "assets" / part["mesh"].replace(".stl", "_collision.stl"), process=False)
+                out.append((np.asarray(mm.vertices) / 1000 + off, np.array(part["slide"]["axis"]), part["slide"]["coef"]))
+            else:
+                body.append(np.asarray(trimesh.load(ROOT / "elrobot_mujoco" / "assets" / part["mesh"], process=False).vertices) / 1000 + off)
+        out.append((np.vstack(body), np.zeros(3), 0.0))
+        _GRIP_PTS = out
+    return _GRIP_PTS
+
+
+def support_clear(frame, gear, support_z, up, gt):
+    """[ours] the jaws (open: gear 0, or closed to `gear`) keep SUPPORT_CLEAR_M above the support plane"""
+    if support_z is None:
+        return True
+    R, o = frame[:3, :3], frame[:3, 3]
+    for P, axis, coef in _grip_pts(gt):
+        for g in {0.0, gear}:
+            W = (P + axis * coef * g) @ R.T + o
+            if (W @ up).min() < support_z + SUPPORT_CLEAR_M:
+                return False
+    return True
 
 
 def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
@@ -339,6 +429,17 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                 if gt.hull_hits(local, hulls, 0.0) or gt.hull_hits(local, hulls, gear):
                     why["집게 충돌"] += 1
                     continue                           # open jaws and closed-to-contact jaws must both be free
+                if not support_clear(frame, gear, support_z, up, gt):
+                    why["받침면 충돌"] = why.get("받침면 충돌", 0) + 1
+                    continue
+                lo_ = (obj - frame[:3, 3]) @ frame[:3, :3]
+                cy = pad_contact_y(lo_, c["width"])
+                if any(v is not None and v > PAD_Y_M[1] - PAD_TIP_KEEP_M for v in cy):
+                    why["손끝 접촉"] = why.get("손끝 접촉", 0) + 1
+                    continue
+                if not jaw_pass_clear(lo_, PREGRASP_OPTIONS_M[0]):
+                    why["하강 여유 부족"] = why.get("하강 여유 부족", 0) + 1
+                    continue
                 R, p = frame[:3, :3], frame[:3, 3]
                 if not approach_clear(collide, frame, hulls, gt, backoff=PREGRASP_OPTIONS_M[-1]):
                     why["접근 충돌"] += 1
@@ -378,6 +479,25 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                 if pre_sol is None or lift_sol is None:
                     why["접근 직선" if pre_sol is None else "들기 직선"] += 1
                     continue
+                # [ours] the pre-grasp must have the fingertips above the object (top + PRE_CLEAR_M): a vertical
+                # approach that reach allowed only 30–50 mm back started with the tips beside the strawberry, and the
+                # free move there (servos sagging 7–11° in the physics) swept it over
+                q_pre0, q_cur = np.asarray(pre_sol[1][0], float), np.asarray(q_now[:7], float)
+                Fp = _tcp_frame(q_pre0)
+                if (Fp[:3, 3] + FINGER_TIP_M * Fp[:3, 1]) @ up < (obj @ up).max() + PRE_CLEAR_M:
+                    why["접근 높이 부족"] = why.get("접근 높이 부족", 0) + 1
+                    continue
+                q_via = None
+                if not transit_clear([q_cur, q_pre0], collide, hulls, gt):
+                    p_pre = _tcp_at(q_pre0)
+                    for hv in TRANSIT_VIA_M:
+                        qv, pev, rev = ik(p_pre + up * hv, R, q_pre0, restarts=0)
+                        if pev <= IK_POS_TOL and rev <= IK_ROT_TOL and transit_clear([q_cur, qv, q_pre0], collide, hulls, gt):
+                            q_via = qv
+                            break
+                    if q_via is None:
+                        why["접근 경로 충돌"] = why.get("접근 경로 충돌", 0) + 1
+                        continue
                 qs = [pre_sol[1][0], q_g, lift_sol[1][-1]]
                 errs = [pre_sol[2], (pe, re), lift_sol[2]]
                 n_ik += 1
@@ -389,6 +509,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                            q_pre=qs[0].round(4).tolist(), q_grasp=qs[1].round(4).tolist(), q_lift=qs[2].round(4).tolist(),
                            approach_mm=round(pre_sol[0] * 1000), rise_mm=round(pre_sol[3] * 1000), lift_mm=round(lift_sol[0] * 1000),
                            q_descend=[q.round(4).tolist() for q in pre_sol[1]], q_rise=[q.round(4).tolist() for q in lift_sol[1]],
+                           q_via=None if q_via is None else q_via.round(4).tolist(),
                            obj_idx=obj_idx, ms=round((time.time() - t0) * 1000))
                 yield dict(out)
         out["tried"][-1].update(collision_free=n_free, ik_ok=n_ik, fail=why)

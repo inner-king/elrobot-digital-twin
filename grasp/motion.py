@@ -43,7 +43,8 @@ def segments(q0, plan):
     rise = plan.get("q_rise") or [plan["q_grasp"], plan["q_lift"]]
     go, gc = grip_targets(plan)
     out = []
-    for wps, label in [([cur, *arm([plan["q_pre"]], go)], "접근 전 위치"),
+    via = arm([plan["q_via"]], go) if plan.get("q_via") else []   # over a waypoint above, when straight would hit
+    for wps, label in [([cur, *via, *arm([plan["q_pre"]], go)], "접근 전 위치"),
                        (arm(desc, go), "파지 위치로 하강"),
                        (arm([plan["q_grasp"]], go) + arm([plan["q_grasp"]], gc), "집게 닫기"),
                        (arm(rise, gc), "들어 올리기")] + _place(plan, arm, go, gc):
