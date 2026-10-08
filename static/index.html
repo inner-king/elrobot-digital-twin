@@ -1431,7 +1431,7 @@ function setGizmo(target, mode){
 // along the floor / turns about the vertical; '옮기기 실행' asks the robot to make it real (grasp_place)
 const TGT_MAT = new THREE.MeshStandardMaterial({color: 0x1c7ed6, transparent: true, opacity: 0.38, depthWrite: false, roughness: .6});
 const placeTgt = {pivot: null, objId: null, c: null, sent: false,
-  moved(){ const p = this.pivot; return !!p && (p.position.distanceTo(this.c) > 0.002 || Math.abs(p.rotation.y) > 0.01); }};
+  moved(){ const p = this.pivot; return !!p && (p.position.distanceTo(this.c) > 0.002 || p.quaternion.angleTo(new THREE.Quaternion()) > 0.01); }};
 function clearPlaceTarget(){
   const p = placeTgt.pivot; if(!p) return;
   if(gizmo.object === p) gizmo.detach();
@@ -1450,15 +1450,14 @@ function makePlaceTarget(m){
 }
 function attachObjectGizmo(){
   const p = placeTgt.pivot; if(!p) return;
-  gizmo.setMode(gizmoMode); gizmo.setSpace('local');
-  // on the support: move in its plane, turn about the vertical (the planner keeps the grasp top-down)
-  if(gizmoMode === 'translate'){ gizmo.showX = gizmo.showZ = true; gizmo.showY = false; }
-  else { gizmo.showX = gizmo.showZ = false; gizmo.showY = true; }
+  // 6 DoF: the object is held rigidly, so the gripper simply follows its pose (lifted off the support = held there)
+  gizmo.setMode(gizmoMode); gizmo.setSpace(gizmoMode === 'rotate' ? 'local' : 'world');
+  gizmo.showX = gizmo.showY = gizmo.showZ = true;
   gizmo.attach(p);
 }
 gizmo.addEventListener('objectChange', () => {
   if(gizmoKind !== 'object' || !placeTgt.pivot) return;
-  const p = placeTgt.pivot; p.rotation.x = p.rotation.z = 0; p.position.y = placeTgt.c.y;
+  const p = placeTgt.pivot;
   p.visible = placeTgt.moved(); placeTgt.sent = false; renderPlacebar();
 });
 function placeDelta(){            // D (ARKit world): target = D · current;  D = T(c + t) · R_y · T(−c)
@@ -1479,7 +1478,8 @@ function renderPlacebar(){
   if(!show) return;
   const p = placeTgt.pivot, o = objInfo(placeTgt.objId), d = p.position.clone().sub(placeTgt.c);
   placebar.querySelector('[data-p="name"]').textContent = `${o?.label ? o.label.name : '물체'} #${placeTgt.objId}`;
-  placebar.querySelector('[data-p="d"]').textContent = `Δx ${(d.x * 100).toFixed(1)} · Δz ${(d.z * 100).toFixed(1)} cm · ${THREE.MathUtils.radToDeg(p.rotation.y).toFixed(0)}°`;
+  const lift = d.y > 0.015 ? ' · 공중: 잡고 유지' : '';
+  placebar.querySelector('[data-p="d"]').textContent = `Δx ${(d.x * 100).toFixed(1)} · Δy ${(d.y * 100).toFixed(1)} · Δz ${(d.z * 100).toFixed(1)} cm · ${THREE.MathUtils.radToDeg(p.quaternion.angleTo(new THREE.Quaternion())).toFixed(0)}°${lift}`;
   const go = placebar.querySelector('[data-p="go"]'); go.disabled = placeTgt.sent;
 }
 gzbar.addEventListener('click', e => {

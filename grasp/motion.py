@@ -3,7 +3,7 @@
 Input : q0 (8 joint angles, rad: 7 arm + gripper rev_motor_08), plan from planner.py
 Output: segments [(waypoints K×8 rad, duration s, label)], executed in order with PAUSE_S between them.
         pick: 접근 전 위치 → 파지 위치로 하강 → 집게 닫기 → 들어 올리기
-        + place (plan["place"]): 옮기기 → 내려놓기 → 집게 열기 → 물러나기
+        + place (plan["place"]): 옮기기 → 내려놓기 → 집게 열기 → 물러나기   (held in the air: 옮기기 → 목표 자세로 → 잡고 유지)
 
 Within a segment the arm moves through the waypoints with one smoothstep over the whole path (piecewise linear
 in joint space between waypoints). The descent and lift waypoints are IK solutions on the straight TCP
@@ -41,6 +41,10 @@ def _place(plan, arm):
     pl = plan.get("place")
     if not pl or "q_release" not in pl:
         return []
+    if pl.get("hold"):                     # target in the air: brought there and held (no release)
+        return [(arm(pl["q_carry"] + pl["q_place_descend"][:1], GRIP_CLOSE), "옮기기"),
+                (arm(pl["q_place_descend"], GRIP_CLOSE), "목표 자세로"),
+                (arm([pl["q_release"]] * 2, GRIP_CLOSE), "잡고 유지")]
     return [(arm(pl["q_carry"] + pl["q_place_descend"][:1], GRIP_CLOSE), "옮기기"),
             (arm(pl["q_place_descend"], GRIP_CLOSE), "내려놓기"),
             (arm([pl["q_release"]], GRIP_CLOSE) + arm([pl["q_release"]], GRIP_OPEN), "집게 열기"),

@@ -97,6 +97,10 @@ class KitchenCamera(VirtualCamera):
         if a:                                          # mesh is centred in x/z: turn about its own vertical axis
             c, s_ = np.cos(a), np.sin(a)
             V = V @ np.array([[c, 0, s_], [0, 1, 0], [-s_, 0, c]], np.float32).T
+        R = self.rot.get(i)
+        if R is not None:                              # any turn, about the mesh centre (x/z centred, base on y = 0)
+            ctr = np.array([0, V[:, 1].max() / 2, 0], np.float32)
+            V = (V - ctr) @ np.asarray(R, np.float32).T + ctr
         return V + o["base"] + self.offset.get(i, np.zeros(3, np.float32)).astype(np.float32)
 
     def object_centres(self):
@@ -110,7 +114,8 @@ class KitchenCamera(VirtualCamera):
     def _raycaster(self):
         import open3d as o3d
         key = (tuple(sorted(self.hidden)), tuple((k, tuple(np.round(v, 4))) for k, v in sorted(self.offset.items())),
-               tuple((k, round(float(v), 3)) for k, v in sorted(self.yaw.items())))
+               tuple((k, round(float(v), 3)) for k, v in sorted(self.yaw.items())),
+               tuple((k, tuple(np.round(np.asarray(v), 3).ravel())) for k, v in sorted(self.rot.items())))
         if key != self._scene_key:
             sc = o3d.t.geometry.RaycastingScene()
             self._gid = {}

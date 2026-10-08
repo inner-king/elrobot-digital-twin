@@ -345,6 +345,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
 PLACE_GAP_M = 0.006            # release this far above the target (the object drops the rest)
 CARRY_EXTRA_M = (0.0, 0.04, 0.08)   # extra straight rise after the lift when the carry would hit something
 CARRY_CLEAR_M = 0.006          # carried object ↔ scene points
+HOLD_ABOVE_M = 0.015          # target this far above the support: nothing to set it on — hold it there instead
 PLACE_BELOW_M = 0.010          # at the target, scene points this low above the support are the support itself
 
 
@@ -382,8 +383,9 @@ def _path_clear(qs, env, obj_local, hulls, gear, gt, n=8, obj_env=None):
 
 def plan_place(gplan, D, points_base, obj_idx, up):
     """[ours] Pick-and-place from a grasp plan. The object's target pose = D · current pose (D: 4×4 in the base frame,
-    from the console's gizmo: a move along the support + a turn about the vertical). The grasp frame moves with the
-    object (G' = D·G, still top-down), released PLACE_GAP_M above the target, then straight back up.
+    any rigid move from the console's gizmo — 6 DoF: the object is held rigidly, so the grasp frame simply moves with
+    it, G' = D·G, tilted if the object is). Released PLACE_GAP_M above the target, then straight back up; a target
+    more than HOLD_ABOVE_M above the support has nothing under it and is held there instead (no release).
       carry   : lift end → (extra straight rise if needed) → above the target, joint-space, checked against the scene
       descend : straight line down to the release pose (planner.line_path)
       retreat : jaws open, same line back up
@@ -411,7 +413,10 @@ def plan_place(gplan, D, points_base, obj_idx, up):
     Hc = Hc - np.outer(Hc @ up, up)
     ev = np.sort(np.linalg.eigvalsh(Hc.T @ Hc / len(Hc)))[-2:]
     round_ = bool(np.sqrt(ev[0] / max(ev[1], 1e-12)) > 0.85)
-    for flip in ((0.0, np.pi) if round_ else (0.0,)):
+    sz = gplan.get("support_z")
+    hold = bool(sz is not None and float((tgt @ up).min()) > sz + SEG_ABOVE_RAW_M + HOLD_ABOVE_M)
+    vertical = abs((D @ G)[:3, 1] @ up) > 0.95             # the 180° twin is only the same for a top-down grasp
+    for flip in ((0.0, np.pi) if round_ and vertical else (0.0,)):
         Gp = D @ G
         if flip:
             Rf = np.eye(4)
@@ -419,7 +424,7 @@ def plan_place(gplan, D, points_base, obj_idx, up):
             K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
             Rf[:3, :3] = np.eye(3) + 2 * K @ K              # Rodrigues, θ = π
             Gp[:3, :3] = Rf[:3, :3] @ Gp[:3, :3]
-        R, p_rel = Gp[:3, :3], Gp[:3, 3] + up * PLACE_GAP_M
+        R, p_rel = Gp[:3, :3], Gp[:3, 3] + (0.0 if hold else PLACE_GAP_M) * up
         for extra in CARRY_EXTRA_M:
             h = lh + extra - PLACE_GAP_M                    # carry height above the release pose
             carry = [q_lift]
@@ -445,7 +450,6 @@ def plan_place(gplan, D, points_base, obj_idx, up):
                 continue
             # descent: the carried object must not hit what is at the target (the support stays CARRY_CLEAR below)
             # (the support it is set down on is not an obstacle for the object: it is released PLACE_GAP above it)
-            sz = gplan.get("support_z")
             # (support-surface noise and edges reach a few mm up: the lowest PLACE_BELOW_M above it are not obstacles)
             above = env[env @ up > sz + PLACE_BELOW_M] if sz is not None else env
             why = _path_clear(descend, env, obj_local, hulls, gear, gt, n=2, obj_env=above)
@@ -454,7 +458,7 @@ def plan_place(gplan, D, points_base, obj_idx, up):
                 break
             return {"q_carry": [q.round(4).tolist() for q in carry], "q_place_descend": [q.round(4).tolist() for q in descend],
                     "q_release": q_rel.round(4).tolist(), "carry_extra_mm": round(extra * 1000), "flip_deg": round(np.degrees(flip)),
-                    "release_gap_mm": PLACE_GAP_M * 1000, "round": round_, "ik_err_mm": round(pe * 1000, 2), "ik_err_deg": round(float(np.degrees(re)), 2),
+                    "release_gap_mm": 0 if hold else PLACE_GAP_M * 1000, "round": round_, "hold": hold, "ik_err_mm": round(pe * 1000, 2), "ik_err_deg": round(float(np.degrees(re)), 2),
                     "target_frame": np.round(Gp, 5).tolist(), "D": np.round(D, 5).tolist(),
                     "target_centre": tgt.mean(axis=0).round(4).tolist(), "tried": tried}
     return {"error": "목표 위치에 놓는 경로를 찾지 못했습니다", "tried": tried}

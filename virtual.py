@@ -122,6 +122,7 @@ class VirtualCamera:
         self.hidden = set()          # object indices removed from the scene (dynamic-scene tests)
         self.offset = {}             # object index → ARKit-world translation (moved by a grasp, from the physics prediction)
         self.yaw = {}                # object index → turn about the vertical through its centre, rad (kitchen scene only)
+        self.rot = {}                # object index → 3×3 world rotation about its centre (kitchen scene only; after yaw)
 
     def start(self):
         self.is_connected = True

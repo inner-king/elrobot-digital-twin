@@ -177,9 +177,10 @@ class GraspManager:
         elif t == "grasp_cancel":
             self._abort.set()
             vc = getattr(self.cam, "_virtual", None) if self.cam else None
-            if vc is not None and (vc.offset or getattr(vc, "yaw", None)):   # virtual scene back to its start
+            if vc is not None and (vc.offset or getattr(vc, "yaw", None) or getattr(vc, "rot", None)):   # back to the start
                 vc.offset.clear()
                 getattr(vc, "yaw", {}).clear()
+                getattr(vc, "rot", {}).clear()
                 self._refresh_changed()
             if hasattr(getattr(self.arm, "bus", None), "stall"):
                 self.arm.bus.stall.clear()
@@ -382,7 +383,7 @@ class GraspManager:
             bus.on_release = release
             p0 = T_wb[:3, :3] @ frames[0, 1:4] + T_wb[:3, 3]
             base_off = vc.offset.get(idx, np.zeros(3)).copy()
-            base_yaw = vc.yaw.get(idx, 0.0) if hasattr(vc, "yaw") else None
+            base_rot = np.asarray(vc.rot.get(idx, np.eye(3))) if hasattr(vc, "rot") else None
             R0 = _quat_R(frames[0, 4:8])
             # jaws blocked by the object in the simulation: the gripper angle it ends at (2.2 = closed on nothing)
             stall_q = float(frames[-1, 15]) if frames[-1, 15] < 2.1 else None
@@ -416,16 +417,16 @@ class GraspManager:
                     if vw:                                            # virtual scene follows the prediction
                         f = frames[min(len(frames) - 1, int(t_nom * 20))]
                         vc.offset[idx] = base_off + (T_wb[:3, :3] @ f[1:4] + T_wb[:3, 3]) - p0
-                        if base_yaw is not None:                      # turn about the vertical (ARKit y)
+                        if base_rot is not None:                      # any turn (6-DoF target), world frame
                             Rw = T_wb[:3, :3] @ (_quat_R(f[4:8]) @ R0.T) @ T_wb[:3, :3].T
-                            vc.yaw[idx] = base_yaw + float(np.arctan2(Rw[0, 2], Rw[2, 2]))
+                            vc.rot[idx] = Rw @ base_rot
                         if stall_q is not None and label == "집게 닫기" and 8 not in bus.stall:
                             lim = self.raw_of(8, stall_q)            # jaws stop on the object, as in the simulation
                             bus.stall[8] = (lim, int(np.sign(self.raw_of(8, 2.2) - self.raw_of(8, 0.0))))
                     time.sleep(1.0 / CTRL_HZ)
                 time.sleep(PAUSE_S)
                 t_seg += dur + PAUSE_S
-            if vw and (self.state.get("plan") or {}).get("place"):
+            if vw and (self.state.get("plan") or {}).get("place") and not self.state["plan"]["place"].get("hold"):
                 off = vc.offset.get(idx)                     # placed: resting on the same support as before
                 if off is not None:
                     vc.offset[idx] = np.array([off[0], base_off[1], off[2]])

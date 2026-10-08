@@ -234,13 +234,15 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
         want = D[:3, :3] @ p_start + D[:3, 3]
         Rw = D[:3, :3] @ R_start
         Re = d.xmat[oid].reshape(3, 3)
-        err = float(np.linalg.norm((d.xpos[oid] - want)[:2]) * 1000)
+        # set down: where on the support (x, y); held in the air: the full 3-D offset (it sags in the jaws)
+        err = float(np.linalg.norm((d.xpos[oid] - want)[:3 if pl.get("hold") else 2]) * 1000)
         ang = float(np.degrees(np.arccos(np.clip((np.trace(Rw.T @ Re) - 1) / 2, -1, 1))))
         if pl.get("flip_deg"):                          # round object placed with the 180°-turned grasp
             ang = abs(ang - 180.0)
         place = {"err_mm": round(err, 1), "err_deg": round(ang, 1), "dz_mm": round(float(d.xpos[oid][2] - want[2]) * 1000, 1),
                  "ok": bool(held and err < 15 and ang < 15)}
-        verdict = verdict if not held else ("옮겨 놓음" if place["ok"] else f"옮겼지만 {err:.0f} mm / {ang:.0f}° 어긋남")
+        done = "목표 자세로 들고 있음" if pl.get("hold") else "옮겨 놓음"
+        verdict = verdict if not held else (done if place["ok"] else f"옮겼지만 {err:.0f} mm / {ang:.0f}° 어긋남")
     return {"frames": frames, "lift_mm": round(lift, 1), "planned_lift_mm": planned, "held": bool(held),
             "verdict": verdict, "jaw_contacts": jaw_contacts, "place": place, "duration_s": round(total, 2), "segments": seg_log,
             "peak_jaw_force_n": round(peak_force, 1), "max_track_err_deg": round(float(np.degrees(track_err)), 2),
