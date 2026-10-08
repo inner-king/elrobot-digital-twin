@@ -37,6 +37,17 @@ def _urdf_limits(urdf):
     return lim
 
 
+def _yaw_only(m16):
+    """[ours] registration (row-major 4×4, scene y up) with its tilt removed: only the turn about the vertical stays,
+    the position is kept. A tilted robot / world (left by a free-rotation gizmo) sat askew in the scene."""
+    M = np.array(m16, float).reshape(4, 4)
+    x = M[:3, 0]
+    a = np.arctan2(-x[2], x[0])                     # heading of the x axis in the horizontal plane
+    c, s_ = np.cos(a), np.sin(a)
+    M[:3, :3] = [[c, 0, s_], [0, 1, 0], [-s_, 0, c]]
+    return M.ravel().tolist()
+
+
 def _quat_R(q):
     w, x, y, z = q
     return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -52,6 +63,7 @@ class GraspManager:
             reg = json.loads(REG_FILE.read_text())
         except Exception:
             reg = {"robot": np.eye(4).ravel().tolist(), "world": np.eye(4).ravel().tolist()}
+        reg = {k: _yaw_only(reg[k]) for k in ("robot", "world")}
         self.state = {"registration": reg, "stage": "idle", "error": None, "plan": None, "object": None,
                       "obj_version": 0, "exec": None}
         self._sel = None          # (points_base, tris, click_base, up_base, T_base_world)
@@ -142,7 +154,7 @@ class GraspManager:
     def handle(self, c):
         t = c["type"]
         if t == "reg_set":
-            reg = {"robot": [float(x) for x in c["robot"]], "world": [float(x) for x in c["world"]]}
+            reg = {"robot": _yaw_only([float(x) for x in c["robot"]]), "world": _yaw_only([float(x) for x in c["world"]])}
             self.state["registration"] = reg
             REG_FILE.write_text(json.dumps(reg))
         elif t == "grasp_select":
