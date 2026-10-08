@@ -356,8 +356,105 @@ def _mirror_heightmap(v, col, fy, near_col):
 CARVE_CELL_M, CARVE_PAD_M, CARVE_TAU_M = 0.004, 0.03, 0.006
 
 
-def _free_space(g, kfs, tau):
+RIM_CELLS = 5                 # rim slice: the top 5 cells (10 mm)
+RIM_CLOSE = 10                # closing of the rim ring, cells: gaps up to ≈ 40 mm (occlusion) bridged
+HOLLOW_MIN_COLS = 100         # cavity columns (2 mm cells: 4 cm²) before an object counts as a container
+
+
+def _thin(inside, raw_v, lo, cell, sup):
+    """[ours] Thin part above the support (a knife's blade, tilted, 8–12 mm of air under its root): the completion
+    extruded every column down to the support, a slab under the blade. A column whose observed surface spans less
+    than THIN_SPAN_M in height, sits below THIN_REL of the object's top and more than THIN_DEPTH_M above the support
+    keeps only THIN_DEPTH_M below what was seen — a sheet, not a wall nobody saw the side of."""
+    nx, ny, nz = inside.shape
+    ix = np.floor((raw_v[:, 0] - lo[0]) / cell).astype(int)
+    iz = np.floor((raw_v[:, 2] - lo[2]) / cell).astype(int)
+    ok = (ix >= 0) & (ix < nx) & (iz >= 0) & (iz < nz)
+    key = ix[ok] * nz + iz[ok]
+    y = raw_v[ok, 1]
+    ymin = np.full(nx * nz, np.inf)
+    ymax = np.full(nx * nz, -np.inf)
+    np.minimum.at(ymin, key, y)
+    np.maximum.at(ymax, key, y)
+    top = raw_v[:, 1].max()
+    seen = np.isfinite(ymin)
+    thin = seen & (ymax - ymin < THIN_SPAN_M) & (ymax - sup < THIN_REL * (top - sup)) & (ymin - sup > THIN_DEPTH_M)
+    if not thin.any():
+        return inside
+    floor_y = np.where(thin, ymin - THIN_DEPTH_M, -np.inf).reshape(nx, nz)
+    yc = lo[1] + (np.arange(ny) + 0.5) * cell
+    return inside & ~(yc[None, :, None] < floor_y[:, None, :])
+
+
+def _hollow(inside, near, free, bottom_idx, erode=3):
+    """[ours] Plausible inside of a container: a column (x, z) where the views looked down into an open-top cavity
+    (cells seen through, nothing solid above them, enclosed by the object at their own height — a ring around them in
+    that horizontal slice, so the free space above an apple's shoulder, open sideways, is not a cavity: the first
+    version hollowed an apple, 1.8 → 4.6 mm) is hollow below that cavity
+    too, down to a thin bottom — the completion (a solid of revolution, a height map) had filled what no view reached
+    with a plug (a pot came out with a false inner floor 40 mm up: 33 mm mean error there). Only completed cells go:
+    a column whose surface under the cavity was observed is left alone (a dimple, a shallow dish: that is the bottom).
+    Arrays (nx, ny, nz), y = axis 1 up."""
+    import cv2
+    occ = inside | near
+    foot = occ.any(axis=1)
+    if foot.sum() < 9:
+        return inside
+    pts = np.argwhere(foot)[:, ::-1].astype(np.int32)          # (z, x) → cv2 (col, row)
+    mask = np.zeros(foot.shape, np.uint8)
+    cv2.fillConvexPoly(mask, cv2.convexHull(pts), 1)
+    mask = cv2.erode(mask, np.ones((2 * erode + 1, 2 * erode + 1), np.uint8)) > 0
+    above = np.flip(np.cumsum(np.flip(occ, 1), 1), 1) - occ  # solid cells above each cell
+    from scipy import ndimage as ndi
+    # enclosure from the rim: the top RIM_M of the object seen as one top-view slice. A container's rim is a ring
+    # (well seen from above); what it encloses is the opening, at every height below. Per-height slices failed: just
+    # behind a pot's near wall the oblique views see nothing, so lower slices were a solid crescent, not a ring.
+    top = np.max(np.nonzero(occ.any(axis=(0, 2)))[0]) if occ.any() else 0
+    rim = occ[:, max(top - RIM_CELLS, 0):top + 1, :].any(axis=1)
+    # breaks in the ring (a wall hidden behind a mug) closed; padded first — closing against the array border
+    # erodes the ring from outside and opened it (the opening vanished in 1 of 2 runs)
+    P = RIM_CLOSE + 2
+    rim = ndi.binary_closing(np.pad(rim, P), iterations=RIM_CLOSE)[P:-P, P:-P]
+    rim = ndi.binary_dilation(rim, iterations=2)             # a 1-cell-thin side of the ring leaked
+    opening = ndi.binary_dilation(ndi.binary_fill_holes(rim) & ~rim, iterations=2)
+    cav = free & (above == 0) & mask[:, None, :] & opening[:, None, :]
+    cav[:, top + 1:, :] = False                                # within the rim height only
+    has = cav.any(axis=1)
+    if has.sum() < HOLLOW_MIN_COLS:
+        return inside
+    low = np.argmax(cav, axis=1)                               # lowest cavity cell per column
+    out = inside.copy()
+    ny = inside.shape[1]
+    yy = np.arange(ny)[None, :, None]
+    # the surface right under the cavity was observed (an apple's stem dimple, a shallow dish): it is the real
+    # bottom there, leave that column alone; unobserved (a pot's inner floor no view reached): a completed plug
+    below = occ & (yy < low[:, None, :])
+    ptop = ny - 1 - np.argmax(np.flip(below, 1), axis=1)       # highest solid cell under the cavity
+    seen = np.take_along_axis(near, ptop[:, None, :], 1)[:, 0, :] & below.any(axis=1)
+    has &= ~seen
+    carve = has[:, None, :] & (yy >= max(bottom_idx, 0)) & (yy < low[:, None, :])
+    out &= ~carve
+    return out
+
+
+def _free_count(g, kfs, tau, hits=False):
+    """how many keyframes saw through each cell (in front of their measured depth by > tau); hits=True also returns
+    how many measured a surface there (|depth − z| ≤ tau)"""
+    n = np.zeros(len(g), np.int32)
+    h = np.zeros(len(g), np.int32)
+    for k in kfs:
+        f, on = _free_space(g, [k], tau, on_surface=True)
+        n += f
+        h += on
+    return (n, h) if hits else n
+
+
+def _free_space(g, kfs, tau, min_filter=False, on_surface=False):
+    """cells some keyframe saw through (in front of its measured depth by > tau). min_filter: compare with the 3×3
+    minimum depth around the pixel, so a silhouette-edge pixel that hit the background does not clear the object."""
+    import cv2
     free = np.zeros(len(g), bool)
+    on = np.zeros(len(g), bool)
     for k in kfs:
         Tcw = np.linalg.inv(k["T"])
         pc = g @ Tcw[:3, :3].T + Tcw[:3, 3]
@@ -367,12 +464,17 @@ def _free_space(g, kfs, tau):
         u = np.round(K[0, 0] * pc[:, 0] / np.where(ok, z, 1) + K[0, 2]).astype(np.int64)
         w = np.round(K[1, 1] * pc[:, 1] / np.where(ok, z, 1) + K[1, 2]).astype(np.int64)
         dep = k["depth"]
+        if min_filter:
+            dep = cv2.erode(np.where(dep > 0, dep, 1e3).astype(np.float32), np.ones((3, 3), np.uint8))
+            dep = np.where(dep < 1e2, dep, 0)
         h, wd = dep.shape
         ok &= (u >= 0) & (u < wd) & (w >= 0) & (w < h)
         d = np.zeros(len(g))
         d[ok] = dep[w[ok], u[ok]]
         free |= ok & (d > 0.05) & (z < d - tau)
-    return free
+        if on_surface:
+            on |= ok & (d > 0.05) & (np.abs(z - d) <= tau)
+    return (free, on) if on_surface else free
 
 
 def carve_object(v, col, sup, kfs):
@@ -423,32 +525,98 @@ def carve_object(v, col, sup, kfs):
     return V, F[:, ::-1].astype(np.int64), col[kk]
 
 
-def fuse_volume(raw_v, raw_t, raw_c, comp_v, comp_t, comp_c, cell=0.002, band=0.003, kfs=None, tau=0.003):
-    """[ours] One seamless surface instead of two stitched meshes (the stitch showed as a jagged seam across an apple):
-    occupancy on a 3 mm grid = inside the completed solid (ray-parity occupancy) OR within `band` of the observed
-    surface, lightly smoothed, then marching cubes. Observed detail survives through the band, the unseen part comes
-    from the completion. (Open3D's Poisson aborted the process on some inputs — measured — so it is not used.)"""
+FUSE_SIGMA_CELLS = 1.0        # occupancy blur before marching cubes (cells; 2 mm at the default cell)
+FUSE_CLOSE_ITERS = 2          # morphological closing: pinholes up to ≈ 2·iters cells are bridged
+FUSE_TAUBIN_ITERS = 10        # Taubin smoothing of the result (λ/μ: does not shrink the object)
+FUSE_TAU_M = 0.003            # completion: a cell is free this far in front of the depth a view measured
+FUSE_BAND_TAU_M = 0.0025      # observed band: its outer half goes where at least FUSE_BAND_VIEWS views saw through it
+FUSE_OPEN_ITERS = 0           # morphological opening: strands thinner than ≈ 2·iters cells go
+FUSE_MIN_PART = 0.05          # loose parts smaller than this share of the largest are dropped
+FUSE_BAND_INNER = True        # observed band only behind the surface (see fuse_volume)
+FUSE_HOLLOW = True            # an open-top cavity the views looked into is hollow down to a thin bottom (below)
+FUSE_BOTTOM_M = 0.004
+FUSE_THIN = True              # thin overhang (a knife blade): see _thin
+THIN_SPAN_M, THIN_REL, THIN_DEPTH_M = 0.004, 0.6, 0.003
+FUSE_COMP_VIEWS = 1           # completion: trimmed where this many views saw through it
+FUSE_BAND_VIEWS = 3           # (one stray silhouette pixel no longer punches a hole; the band alone was 3 mm too fat)
+
+
+def fuse_volume(raw_v, raw_t, raw_c, comp_v, comp_t, comp_c, cell=0.002, band=0.003, kfs=None, tau=FUSE_TAU_M, shell=False):
+    """[ours] One closed, smooth surface from the observed mesh and its completion (instead of two stitched meshes:
+    the stitch showed as a jagged seam across an apple):
+      occupancy = (inside the completed solid − space the views saw through)
+              ∪ (within `band` behind the observed surface − space ≥ 2 views saw through)
+      → closing (pinholes) → Gaussian blur → marching cubes → Taubin smoothing.
+    The free-space cut trims only the completion where it bulges past what was seen (the union alone came out 2–3 mm
+    too fat); it never removes observed surface — cutting that too punched holes in a pot's bottom and a mug's rim,
+    where coarse 256×192 depth pixels at silhouette edges "saw through" thin walls; any cut now needs two views.
+    shell: the completion is an open shell (container prior) and counts by distance, not parity.
+    (Open3D's Poisson aborted the process on some inputs — measured — so it is not used.)"""
     import open3d as o3d
     from scipy import ndimage as ndi
     from scipy.spatial import cKDTree
     from skimage.measure import marching_cubes
-    lo = np.minimum(raw_v.min(0), comp_v.min(0)) - 3 * cell
-    hi = np.maximum(raw_v.max(0), comp_v.max(0)) + 3 * cell
+    pad = FUSE_CLOSE_ITERS + 3
+    lo = np.minimum(raw_v.min(0), comp_v.min(0)) - pad * cell
+    hi = np.maximum(raw_v.max(0), comp_v.max(0)) + pad * cell
     shape = np.ceil((hi - lo) / cell).astype(int)
     g = np.stack(np.meshgrid(*[lo[i] + (np.arange(shape[i]) + 0.5) * cell for i in range(3)], indexing="ij"), -1).reshape(-1, 3)
     sc = o3d.t.geometry.RaycastingScene()
     sc.add_triangles(o3d.core.Tensor(comp_v.astype(np.float32)), o3d.core.Tensor(comp_t.astype(np.uint32)))
-    inside = sc.compute_occupancy(o3d.core.Tensor(g.astype(np.float32))).numpy() > 0.5
-    near = cKDTree(raw_v).query(g, distance_upper_bound=band)[0] < np.inf
-    occ = inside | near
-    if kfs:                     # what the views saw through is empty: trims a completion that bulges past the observed
-        occ &= ~_free_space(g, kfs, tau)                       # surface (the union alone came out 2–3 mm too fat)
-    occ = occ.reshape(shape).astype(float)
-    occ = ndi.gaussian_filter(np.pad(occ, 1), 0.5)
+    G = o3d.core.Tensor(g.astype(np.float32))
+    if shell:                                               # open shell (container prior): its wall, by distance
+        inside = sc.compute_distance(G).numpy() < max(band, WALL_M / 2)
+    else:                                                   # solid (ray-parity vote; tolerates small gaps)
+        inside = sc.compute_occupancy(G, nsamples=3).numpy() > 0.5
+    if kfs:                                                 # trim the completion where ≥ 2 views saw through it
+        seen_free = _free_count(g, kfs, tau) >= FUSE_COMP_VIEWS
+        inside &= ~seen_free
+    dist, ki = cKDTree(raw_v).query(g, distance_upper_bound=band)
+    near = dist < np.inf
+    # the band only behind the observed surface (inside, against its outward normal): a ±band shell put the surface
+    # band-far outside wherever no view saw past the side (a knife came out 32 mm wide, 24 observed, 21 real)
+    rm = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(raw_v), o3d.utility.Vector3iVector(np.asarray(raw_t).astype(np.int32)))
+    rm.compute_vertex_normals()
+    rn = np.asarray(rm.vertex_normals)
+    idx = np.nonzero(near)[0]
+    if FUSE_BAND_INNER:
+        near[idx] = np.einsum("ij,ij->i", g[idx] - raw_v[ki[idx]], rn[ki[idx]]) < 0.5 * cell
+    if kfs:
+        # trimmed where ≥ FUSE_BAND_VIEWS views saw through and they outnumber the views that hit the surface there:
+        # a mug handle (8 mm, 2–3 depth pixels) is hit by some views and "seen through" by others (mixed pixels)
+        nf, nh = _free_count(g, kfs, FUSE_BAND_TAU_M, hits=True)
+        near &= ~((nf >= FUSE_BAND_VIEWS) & (nf > nh))
+    if FUSE_THIN and not shell:
+        inside = _thin(inside.reshape(shape), raw_v, lo, cell,
+                       min(raw_v[:, 1].min(), comp_v[:, 1].min())).ravel()
+    if kfs and FUSE_HOLLOW and not shell:
+        inside = _hollow(inside.reshape(shape), near.reshape(shape), seen_free.reshape(shape),
+                         int(round((min(raw_v[:, 1].min(), comp_v[:, 1].min()) + FUSE_BOTTOM_M - lo[1]) / cell))).ravel()
+    occ = (inside | near).reshape(shape)
+    if FUSE_CLOSE_ITERS > 0:                                # (scipy: iterations 0 = "until nothing changes")
+        occ = ndi.binary_closing(occ, structure=ndi.generate_binary_structure(3, 1), iterations=FUSE_CLOSE_ITERS)
+    if FUSE_OPEN_ITERS > 0:
+        occ = ndi.binary_opening(np.pad(occ, FUSE_OPEN_ITERS + 1), structure=ndi.generate_binary_structure(3, 1),
+                                 iterations=FUSE_OPEN_ITERS)[(slice(FUSE_OPEN_ITERS + 1, -FUSE_OPEN_ITERS - 1),) * 3]
+    occ = ndi.gaussian_filter(np.pad(occ.astype(float), 1), FUSE_SIGMA_CELLS)
     V, F, _, _ = marching_cubes(occ, 0.5, spacing=(cell,) * 3)
     V = V + lo - cell
+    F = F[:, ::-1].astype(np.int64)
+    m = o3d.geometry.TriangleMesh(o3d.utility.Vector3dVector(V), o3d.utility.Vector3iVector(F.astype(np.int32)))
+    if FUSE_TAUBIN_ITERS:
+        m = m.filter_smooth_taubin(number_of_iterations=FUSE_TAUBIN_ITERS)
+    # loose bits (noise strands under a pot's handle) go. Connected = sharing an edge: Open3D's clustering joins
+    # parts touching at one vertex, and kept 161 strands on a pot
+    import trimesh
+    tm = trimesh.Trimesh(np.asarray(m.vertices), np.asarray(m.triangles), process=True)
+    lab = trimesh.graph.connected_component_labels(tm.face_adjacency, node_count=len(tm.faces))
+    cnt = np.bincount(lab)
+    keep = cnt[lab] >= FUSE_MIN_PART * cnt.max()
+    tm.update_faces(keep)
+    tm.remove_unreferenced_vertices()
+    V, F = np.asarray(tm.vertices), np.asarray(tm.faces).astype(np.int64)
     _, k = cKDTree(np.vstack([raw_v, comp_v])).query(V)
-    return V, F[:, ::-1].astype(np.int64), np.vstack([raw_c, comp_c])[k]
+    return V, F, np.vstack([raw_c, comp_c])[k]
 
 
 def complete_object(v, col, fy):

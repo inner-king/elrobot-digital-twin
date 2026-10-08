@@ -70,7 +70,47 @@ def timeline(q0, plan):
 STALL_NM = 3.43                 # ST3215 stall torque in elrobot.xml (actuator forcerange)
 
 
-def simulate(plan, obj_points, support_h, q0, torque_frac=None):
+DENSITY = 800.0                 # kg/m³ for the mass estimate (produce ≈ 900–1000, a ceramic mug's wall more)
+MASS_RANGE = (0.02, 0.6)
+DECOMP_PITCH = 0.006
+
+
+def decompose(V, T, pitch=DECOMP_PITCH):
+    """[ours] Approximate convex decomposition of a closed mesh: its solid voxels (pitch) clustered by k-means into
+    pieces ≈ 20 mm across, each piece the convex hull of its voxels' corners. Keeps a cup's hollow and a banana's
+    bend that one convex hull fills in. → ([trimesh hull], [voxel count], solid volume m³)."""
+    import trimesh
+    from scipy.cluster.vq import kmeans2
+    m = trimesh.Trimesh(V, T, process=True)
+    C = m.voxelized(pitch).fill().points
+    if len(C) < 16:
+        h = trimesh.convex.convex_hull(V)
+        return [h], [1], float(h.volume)
+    k = int(np.clip(np.ceil(np.ptp(C, axis=0).max() / 0.02) * 2, 2, 32))
+    k = min(k, len(C) // 8)
+    _, lab = kmeans2(C, k, minit="++", seed=0)
+    corners = np.array([[a, b, c] for a in (-1, 1) for b in (-1, 1) for c in (-1, 1)], float) * pitch / 2
+    parts, counts = [], []
+    for j in range(k):
+        Q = C[lab == j]
+        if len(Q) < 2:
+            continue
+        parts.append(trimesh.convex.convex_hull((Q[:, None, :] + corners).reshape(-1, 3)))
+        counts.append(len(Q))
+    return parts, counts, float(len(C) * pitch ** 3)
+
+
+def _hull_json(parts, c):
+    """all convex pieces as one triangle list (body frame) for the console's ghost"""
+    v, f, n = [], [], 0
+    for p_ in parts:
+        v.append(p_.vertices - c)
+        f.append(p_.faces + n)
+        n += len(p_.vertices)
+    return {"v": np.round(np.vstack(v), 4).tolist(), "f": np.vstack(f).tolist()}
+
+
+def simulate(plan, obj_points, support_h, q0, torque_frac=None, obj_mesh=None):
     """torque_frac: 8 fractions of the stall torque the real servos are allowed (torque_limit register ∧ console cap).
     Every joint is a force-limited position servo (elrobot.xml kp), so the arm sags/stalls and the jaws stop on the
     object like the real ones; frames record the *simulated* joints, the jaw contact force and the gripper torque."""
@@ -86,7 +126,19 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None):
     spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
     spec.option.noslip_iterations = 10
     spec.option.impratio = 10.0
-    spec.add_mesh(name="obj_hull", uservert=(hull.vertices - c).ravel().tolist(), userface=hull.faces.ravel().tolist())
+    # [ours] the completed mesh, when the object came from the reconstruction: convex pieces (decompose), mass from
+    # its volume; otherwise one convex hull of the points closed down to the support, OBJ_MASS
+    if obj_mesh is not None:
+        parts, counts, vol = decompose(np.asarray(obj_mesh[0], float), np.asarray(obj_mesh[1]))
+        mass = float(np.clip(vol * DENSITY, *MASS_RANGE))
+        allv = np.vstack([p.vertices for p in parts])
+        c = allv.mean(axis=0)
+        shape_note = f"완성 메시 → 볼록 조각 {len(parts)}개 (복셀 {DECOMP_PITCH * 1000:.0f} mm), 부피 {vol * 1e6:.0f} cm³ × {DENSITY / 1000:g} g/cm³"
+    else:
+        parts, counts, mass = [hull], [1], OBJ_MASS
+        shape_note = "볼록 껍질"
+    for j, p_ in enumerate(parts):
+        spec.add_mesh(name=f"obj_hull{j}", uservert=(p_.vertices - c).ravel().tolist(), userface=p_.faces.ravel().tolist())
     # [ours] the support collides with the object only (contype/conaffinity bit 2): it is an infinite plane, and at
     # cutting-board height (12 mm) the robot base standing on the floor sat inside it — the friction held joint 1 back
     # 25° and the jaws closed 10 cm beside the object. The arm vs. the support is the planner's scene-point check.
@@ -94,8 +146,9 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None):
                             friction=[OBJ_MU, 0.005, 0.0001], contype=2, conaffinity=2)
     body = spec.worldbody.add_body(name="object", pos=c.tolist())
     body.add_freejoint()
-    body.add_geom(name="object", type=mujoco.mjtGeom.mjGEOM_MESH, meshname="obj_hull", mass=OBJ_MASS,
-                  friction=[OBJ_MU, 0.005, 0.0001], condim=4, contype=3, conaffinity=3)
+    for j, n_ in enumerate(counts):
+        body.add_geom(name=f"object{j}", type=mujoco.mjtGeom.mjGEOM_MESH, meshname=f"obj_hull{j}", mass=mass * n_ / sum(counts),
+                      friction=[OBJ_MU, 0.005, 0.0001], condim=4, contype=3, conaffinity=3)
     m = spec.compile()
     m.opt.timestep = DT
     jaw_bodies = {m.body(n).id for n in ("Gripper_Jaw_01_v1_1", "Gripper_Jaw_02_v1_1")}
@@ -193,6 +246,6 @@ def simulate(plan, obj_points, support_h, q0, torque_frac=None):
             "peak_jaw_force_n": round(peak_force, 1), "max_track_err_deg": round(float(np.degrees(track_err)), 2),
             "torque_frac": np.round(tf, 3).tolist(),
             "frame_cols": "t, 물체 xyz, 물체 quat(wxyz), 관절 q1..q8 (시뮬 실제값), 집게 접촉 수직력 N, 집게 토크 N·m",
-            "hull": {"v": np.round(hull.vertices - c, 4).tolist(), "f": hull.faces.tolist()},
-            "assumptions": f"볼록 껍질, 질량 {OBJ_MASS} kg, 마찰 {OBJ_MU}, 집게 마찰 {JAW_MU} (TACO 물리 설정), "
+            "hull": _hull_json(parts, c), "mass_kg": round(mass, 3),
+            "assumptions": f"{shape_note}, 질량 {mass:.3f} kg, 마찰 {OBJ_MU}, 집게 마찰 {JAW_MU} (TACO 물리 설정), "
                            f"관절 = 위치 서보 kp 18.22 · 토크 상한 {', '.join(f'{x:.0%}' for x in tf)}"}

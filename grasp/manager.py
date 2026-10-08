@@ -212,7 +212,7 @@ class GraspManager:
             pb, obj_idx, support, env_idx = segment_given(pb, ob_, spb, up_base)
             click = ob_.mean(axis=0)
             v = (pb - T_bw[:3, 3]) @ T_bw[:3, :3]                          # world copy of the merged points
-            self._seg = (obj_idx, support, env_idx)
+            self._seg = (obj_idx, support, env_idx, (Vw @ T_bw[:3, :3].T + T_bw[:3, 3], Tw))   # + completed mesh, base
             tris, src = None, f"복원 객체 #{c['obj_id']} (완성 메시)"
         try:
             if self._seg is not None:
@@ -254,7 +254,7 @@ class GraspManager:
         o = self._obj_world
         return b"" if o is None else np.array([len(o)], np.uint32).tobytes() + o.tobytes()
 
-    SIM_TRIES = 3          # [ours] feasible grasps checked by the physics prediction before giving up
+    SIM_TRIES = 5          # [ours] feasible grasps checked by the physics prediction before giving up
 
     def _plan(self, D=None):
         """[TACO candidates → ours: IK, straight paths] then the physics prediction picks among the first SIM_TRIES
@@ -289,7 +289,8 @@ class GraspManager:
                 t1 = time.time()
                 sz = r.get("support_z")
                 sz = float(pb[obj_idx][:, 2].min() - 0.008) if sz is None else sz
-                r["sim"] = simulate(r, _drop_outliers(pb[obj_idx]), sz, q0, self._torque_frac())
+                r["sim"] = simulate(r, _drop_outliers(pb[obj_idx]), sz, q0, self._torque_frac(),
+                                    obj_mesh=self._seg[3] if self._seg is not None and len(self._seg) > 3 else None)
                 r["sim"]["ms"] = round((time.time() - t1) * 1000)
             except Exception as e:
                 r["sim"] = {"error": str(e), "lift_mm": -1e9}

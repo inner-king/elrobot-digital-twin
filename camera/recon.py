@@ -105,6 +105,17 @@ def _blob_arrays(b, off):
     return V, T, C, off
 
 
+def _rigid(A, B):
+    """rigid transform (4×4) taking corresponding points A → B (Kabsch)"""
+    ca, cb = A.mean(0), B.mean(0)
+    U, _, Wt = np.linalg.svd((A - ca).T @ (B - cb))
+    D = np.diag([1, 1, np.sign(np.linalg.det(Wt.T @ U.T))])
+    R = Wt.T @ D @ U.T
+    T = np.eye(4)
+    T[:3, :3], T[:3, 3] = R, cb - R @ ca
+    return T
+
+
 def _consistency(V, T, obs, kfs):
     """How well a candidate surface explains the views (lower = better, metres): RMS distance of the observed points to
     it + 2 cm × share of the observed points it leaves uncovered (> 1 cm) + 3 cm × share of it inside observed free space."""
@@ -413,10 +424,7 @@ class Reconstructor:
                     pass
             comp["coverage_deg"] = cov
             if COMPLETE_MODE in ("hybrid", "carve", "auto"):  # observed faces kept, completion only where unseen
-                try:                                         # one seamless surface (volume), stitched as fallback
-                    comp["V"], comp["T"], comp["C"] = fuse_volume(pv, pt, pc, comp["V"], comp["T"], comp["C"], kfs=self._carve_kfs)
-                except Exception:
-                    comp["V"], comp["T"], comp["C"] = hybrid(pv, pt, pc, comp["V"], comp["T"], comp["C"])
+                comp["V"], comp["T"], comp["C"] = self._fuse(pv, pt, pc, comp)   # one closed, smooth surface
             obj_pts[oid] = pv[np.random.default_rng(0).choice(len(pv), min(len(pv), 2000), replace=False)]
             geo_pts.append(obj_pts[oid])
             geo_mesh.append((pv, pt, pc, sup, (comp["V"], comp["T"])))
@@ -545,6 +553,15 @@ class Reconstructor:
                 "y": float(fy), "px": [int(nx), int(nz)], "seen": round(float(have.mean()), 3),
                 "version": int(self.status.get("version", 0)) + 1}
         return meta, png.tobytes()
+
+    def _fuse(self, pv, pt, pc, comp):
+        """observed mesh + completion → one closed smooth surface (complete.fuse_volume); stitched as fallback"""
+        try:
+            return fuse_volume(pv, pt, pc, comp["V"], comp["T"], comp["C"], kfs=self._carve_kfs,
+                               shell=comp.get("shape") == "container" or "plausible" in comp)
+        except Exception as e:
+            self.status["fuse_error"] = str(e)
+            return hybrid(pv, pt, pc, comp["V"], comp["T"], comp["C"])
 
     def _assign_ids(self, pieces, prev):
         """[ours] Stable ids. 1) a piece within 3 cm of last rebuild's piece keeps its id (closest first);
@@ -687,7 +704,7 @@ class Reconstructor:
             sup = min(geo_mesh[k][3] for k in ks)
             pv, pt, pc = np.vstack(Vs), np.vstack(Ts), np.vstack(Cs)
             comp = complete_object(pv, pc, sup)
-            comp["V"], comp["T"], comp["C"] = hybrid(pv, pt, pc, comp["V"], comp["T"], comp["C"])
+            comp["V"], comp["T"], comp["C"] = self._fuse(pv, pt, pc, comp)
             k0 = ks[0]
             geo_mesh[k0] = (pv, pt, pc, sup, (comp["V"], comp["T"]))
             out[k0] = out[k0][:4] + _mesh_blob(pv, pt, pc) + _mesh_blob(comp["V"], comp["T"], comp["C"])
@@ -707,9 +724,10 @@ class Reconstructor:
                 mdl = insts[own[0][2]].get("model") if own else None
                 if reg is not None and mdl is not None and insts[own[0][2]].get("use_model", True) and not reg.get("ai"):
                     V, F, C, st = mdl                       # the AI model asked for replaces the frozen mesh
+                    pv, pt, pc, sup, _ = geo_mesh[k]
+                    V, F, C = self._fuse(pv, pt, pc, {"V": V, "T": F, "C": C})   # as the completion (see below)
                     reg.update(mesh=(V, F, C), ai=True)
                     reg["info"].update(shape="ai", dims_mm=(np.ptp(V, axis=0) * 1000).round(0).astype(int).tolist(), model=st)
-                    pv, pt, pc, sup, _ = geo_mesh[k]
                     out[k] = out[k][:4] + _mesh_blob(pv, pt, pc) + _mesh_blob(V, F, C)
                     info[k].update(shape="ai", dims_mm=reg["info"]["dims_mm"], model=st)
                 keep.append(k)
@@ -741,6 +759,19 @@ class Reconstructor:
                     if not insts[j].get("use_model", True):    # shown only when asked for (button toggles it)
                         mdl = None
                 if mdl is not None:
+                    # [ours] the AI model fills only what was not seen: fused with the observed surface, cut where the
+                    # views saw through it (measured, virtual pot / mug: AI mesh alone 10.2 / 4.7 mm mean error — one
+                    # occluded oblique view gives wrong proportions; as the completion 2.6 / 3.1 mm). Fused once per
+                    # model, then moved with it.
+                    fz = insts[j].get("fused")
+                    if fz is None or fz[0] is not mdl[3]:
+                        fz = (mdl[3], V.copy(), *self._fuse(pv, pt, pc, {"V": V, "T": F, "C": C}))
+                        insts[j]["fused"] = fz
+                    elif np.abs(V - fz[1]).max() > 1e-6:      # moved by the tracking since it was fused
+                        Tm = _rigid(fz[1], V)
+                        fz = (fz[0], V.copy(), fz[2] @ Tm[:3, :3].T + Tm[:3, 3], fz[3], fz[4])
+                        insts[j]["fused"] = fz
+                    V, F, C = fz[2], fz[3], fz[4]
                     out[k] = out[k][:4] + _mesh_blob(pv, pt, pc) + _mesh_blob(V, F, C)
                     info[k].update(shape="ai", dims_mm=(np.ptp(V, axis=0) * 1000).round(0).astype(int).tolist(),
                                    rms_mm=st.get("rmse_mm"), model=st)
@@ -750,7 +781,7 @@ class Reconstructor:
                     pv, pt, pc, sup, _ = geo_mesh[k]
                     comp = complete_container(pv, pc, sup)
                     if comp["plausible"]:                    # a wrong label must not force a wrong shape
-                        Vc, Tc, Cc = hybrid(pv, pt, pc, comp["V"], comp["T"], comp["C"])
+                        Vc, Tc, Cc = self._fuse(pv, pt, pc, comp)
                         out[k] = out[k][:4] + _mesh_blob(pv, pt, pc) + _mesh_blob(Vc, Tc, Cc)
                         info[k].update(shape="container", dims_mm=comp["dims_mm"], rms_mm=comp["rms_mm"], fits_mm={})
             keep.append(k)
@@ -794,8 +825,8 @@ class Reconstructor:
             bottom = float(V[:, 1].min())
             sup = sup0 if j == 0 or bottom - sup0 < 0.004 else bottom   # what stands on the support starts on it
             comp = complete_object(V, C, sup)
-            if COMPLETE_MODE == "hybrid":
-                comp["V"], comp["T"], comp["C"] = hybrid(V, Tj, C, comp["V"], comp["T"], comp["C"])
+            if COMPLETE_MODE in ("hybrid", "carve", "auto"):
+                comp["V"], comp["T"], comp["C"] = self._fuse(V, Tj, C, comp)
             oid = 1000 + inst["id"]
             lo, hi = V.min(axis=0), V.max(axis=0)
             out.append(np.array([oid], np.uint32).tobytes() + _mesh_blob(V, Tj, C) + _mesh_blob(comp["V"], comp["T"], comp["C"]))

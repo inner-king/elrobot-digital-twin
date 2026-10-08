@@ -52,6 +52,10 @@ LIFT_OPTIONS_M = (0.05, 0.03)
 # above the object (a 3 cm pre-grasp let that move sweep the jaws through a 40 mm box in the physics check)
 RISE_OPTIONS_M = (0.08, 0.05, 0.03)
 IK_POS_TOL, IK_ROT_TOL = 2e-3, 0.03
+# [ours] where along the pads the object sits: TCP moved back along the approach by this much (+ = contact nearer the
+# fingertips, which end 13 mm past the TCP — a 17–24 mm-high knife on a board had every candidate's tips in the board;
+# − = deeper in the jaws, more pad on the object)
+GRASP_DEPTH_M = (0.0, -0.010, 0.006, 0.010)
 
 
 def _gt():
@@ -232,8 +236,10 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
     gt = _gt()
     t0 = time.time()
     up = up / np.linalg.norm(up)
+    given_mesh = None
     if seg is not None:                                # the object was given (segment_given)
-        obj_idx, support, env_idx = seg
+        obj_idx, support, env_idx = seg[:3]
+        given_mesh = seg[3] if len(seg) > 3 else None  # its completed mesh (V, T) in the base frame
     else:
         obj_idx, support, env_idx = segment_object(points_base, click_base, up,
                                                    SEG_ABOVE_M if tris is not None else SEG_ABOVE_RAW_M)
@@ -247,7 +253,14 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
     collide = np.vstack([obj, points_base[env_idx]]) if len(env_idx) else obj
     support_z = float(click_base @ up + support) if abs(up[2]) > 0.95 else None   # base z up: absolute support height
     out["support_z"] = support_z
-    for label, mesh in object_meshes(points_base, tris, obj_idx, support_z):
+    surfaces = object_meshes(points_base, tris, obj_idx, support_z)
+    if given_mesh is not None:
+        # [ours] the completed (non-convex) surface first: a mug's or pot's rim, a banana's inner curve fit the 51 mm
+        # jaws; their convex hull (94 / 266 / 75 mm across) gave no candidate at all
+        import trimesh
+        cm = trimesh.Trimesh(given_mesh[0], given_mesh[1], process=True)
+        surfaces = [("완성 메시", cm)] + [x for x in surfaces if x[0] != "관측 메시"]
+    for label, mesh in surfaces:
         # [TACO] sample on this surface; normals = mesh vertex normals (outward)
         roi = np.asarray(mesh.vertices)
         nrm = np.asarray(mesh.vertex_normals)
@@ -267,8 +280,9 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
         for c in ranked:
             gear = (gt.GRIPPER_SPAN - c["width"] - 2 * gt.CLEARANCE_MM / 1000) * gt.GEAR_PER_METRE
             near = collide[np.linalg.norm(collide - c["centre"], axis=1) < COLLISION_RADIUS_M]
-            for roll in gt.ROLLS:
+            for roll, depth in ((r_, d_) for r_ in gt.ROLLS for d_ in GRASP_DEPTH_M):
                 frame = gt.place_gripper(c, roll, approach)
+                frame[:3, 3] -= depth * frame[:3, 1]           # [ours] pad position on the object (GRASP_DEPTH_M)
                 local = (near - frame[:3, 3]) @ frame[:3, :3]
                 if gt.hull_hits(local, hulls, 0.0) or gt.hull_hits(local, hulls, gear):
                     continue                           # open jaws and closed-to-contact jaws must both be free
@@ -313,7 +327,7 @@ def plans(points_base, tris, click_base, up, q_now, rng_seed=0, seg=None):
                 n_ik += 1
                 out.update(surface=label, candidates=len(cands), collision_free_tried=n_free, ik_ok=n_ik,
                            width_mm=round(c["width"] * 1000, 1), quality=round(c["quality"], 3),
-                           roll_deg=round(float(np.degrees(roll)), 0), gear=round(float(gear), 3),
+                           roll_deg=round(float(np.degrees(roll)), 0), gear=round(float(gear), 3), depth_mm=round(depth * 1000),
                            frame=np.round(frame, 5).tolist(),
                            ik_err_mm=[round(float(e[0]) * 1000, 2) for e in errs], ik_err_deg=[round(float(np.degrees(e[1])), 2) for e in errs],
                            q_pre=qs[0].round(4).tolist(), q_grasp=qs[1].round(4).tolist(), q_lift=qs[2].round(4).tolist(),

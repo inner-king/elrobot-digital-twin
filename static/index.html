@@ -391,7 +391,6 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
     <div class="setrow"><span class="lbl"><span class="ic">kitchen</span>가상 장면</span>
       <select data-k="k-vscene" style="font:12px var(--sans);padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
         <option value="kitchen">주방 (실제 메시)</option><option value="boxes">상자 3개</option></select></div>
-    <div class="btns" style="margin-top:4px" title="가상 장면 물체 놓기/치우기" data-k="k-vobjs"></div>
   </div>
   <div class="metrics" data-k="k-metrics"></div>
   <h4><span class="ic">view_in_ar</span>복원</h4>
@@ -572,8 +571,7 @@ async function loadReconObjects(){
     const id = take(buf, Uint32Array, 1, 4)[0], raw = mesh(buf), full = mesh(buf);
     const m = new THREE.Mesh(showComplete ? full : raw, new THREE.MeshStandardMaterial({vertexColors: true, roughness: .55, side: THREE.DoubleSide}));
     m.userData = {objId: id, raw, full};
-    // instance outline: sharp edges in a per-object colour
-    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 50), new THREE.LineBasicMaterial({color: OBJ_COLORS[id % OBJ_COLORS.length]})));
+    // (no edge outline: on a scanned surface the 50° crease edges came out as a speckle over the whole object)
     m.frustumCulled = false; m.castShadow = m.receiveShadow = true; reconObjs.add(m);
   }
   markSelected();
@@ -582,7 +580,6 @@ function setShowComplete(on){
   showComplete = on;
   for(const m of reconObjs.children){
     m.geometry = on ? m.userData.full : m.userData.raw;
-    const e = m.children[0]; e.geometry.dispose(); e.geometry = new THREE.EdgesGeometry(m.geometry, 50);
   }
 }
 // mask-only objects from the recogniser (e.g. a knife blade thinner than the depth noise): fused 3-D points
@@ -970,7 +967,6 @@ const PANEL_DEFS = {
       q(r, 'k-host').addEventListener('input', () => { P.editing = true; });
       q(r, 'k-link-apply').addEventListener('click', () => { P.editing = false; send({type:'cam_config', link:q(r, 'k-link').value, host:q(r, 'k-host').value}); });
       P.syncHost = syncHost;
-      q(r, 'k-virtual').addEventListener('click', e => { const i = e.target.closest('[data-vobj]')?.dataset.vobj; if(i !== undefined) send({type:'cam_virtual_toggle', index:+i}); });
       q(r, 'k-vscene').addEventListener('change', e => send({type:'cam_virtual_scene', scene: e.target.value}));
       q(r, 'k-dstart').addEventListener('click', () => send({type:'detect_start'}));
       q(r, 'k-dstop').addEventListener('click', () => send({type:'detect_stop'}));
@@ -1007,10 +1003,7 @@ const PANEL_DEFS = {
       }
       if(!P.editing){ q(r, 'k-link').value = c.link || 'usb'; q(r, 'k-host').value = c.host || ''; P.syncHost(); }
       q(r, 'k-virtual').style.display = c.link === 'virtual' ? '' : 'none';
-      const vk = JSON.stringify(c.virtual_objects);
-      if(vk !== P.vobjKey){ P.vobjKey = vk; q(r, 'k-vobjs').innerHTML = (c.virtual_objects || []).map((n, i) => `<button class="small" data-vobj="${i}"><span class="ic">deployed_code</span>${esc(n)}</button>`).join(''); }
       if(document.activeElement !== q(r, 'k-vscene')) q(r, 'k-vscene').value = c.virtual_scene || 'kitchen';
-      for(const b of q(r, 'k-virtual').querySelectorAll('[data-vobj]')) b.classList.toggle('primary', !(c.virtual_hidden || []).includes(+b.dataset.vobj));
       q(r, 'k-stage').textContent = c.connected ? '' : (c.error ? `${c.error}` : (c.stage || ''));
       q(r, 'k-metrics').innerHTML = [
         ['수신', `${c.fps ?? 0} fps`], ['화면 갱신', `${camInfo.hz} Hz`], ['점 개수', `${(camInfo.n || 0).toLocaleString()}`],
@@ -1414,6 +1407,9 @@ const gizmoProxy = new THREE.Object3D(); scene.add(gizmoProxy);   // TransformCo
 let gizmoTarget = null;
 gizmo.addEventListener('objectChange', () => {
   if(!gizmoTarget) return;
+  if(gizmoMode === 'rotate'){       // yaw only (about the scene's vertical): drop any tilt before it reaches the registration
+    const e = new THREE.Euler().setFromQuaternion(gizmoProxy.quaternion, 'YXZ'); e.x = e.z = 0; gizmoProxy.quaternion.setFromEuler(e);
+  }
   gizmoProxy.updateMatrix(); gizmoTarget.matrix.copy(gizmoProxy.matrix); gizmoTarget.matrixWorldNeedsUpdate = true;
 });
 let gizmoMode = 'translate';
@@ -1427,7 +1423,9 @@ function setGizmo(target, mode){
   if(target === 'object'){ attachObjectGizmo(); return; }
   gizmoTarget = target === 'robot' ? robotRoot : worldAdj;
   gizmoTarget.matrix.decompose(gizmoProxy.position, gizmoProxy.quaternion, gizmoProxy.scale);
-  gizmo.setMode(gizmoMode); gizmo.attach(gizmoProxy);
+  gizmo.setMode(gizmoMode);
+  if(gizmoMode === 'rotate'){ gizmo.setSpace('local'); gizmo.showX = gizmo.showZ = false; }   // robot / world: yaw only
+  gizmo.attach(gizmoProxy);
 }
 // ---- [ours] object place target: the clicked object's completed mesh as a semi-transparent copy the gizmo moves
 // along the floor / turns about the vertical; '옮기기 실행' asks the robot to make it real (grasp_place)
@@ -1447,7 +1445,6 @@ function makePlaceTarget(m){
   const c = g.boundingBox.getCenter(new THREE.Vector3());
   const pivot = new THREE.Object3D(); pivot.position.copy(c); pivot.rotation.order = 'YXZ'; world.add(pivot);
   const gm = new THREE.Mesh(g, TGT_MAT); gm.position.copy(c).negate(); gm.userData.overlay = true; gm.renderOrder = 3; gm.raycast = () => {};
-  gm.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 50), new THREE.LineBasicMaterial({color: 0x1c7ed6, transparent: true, opacity: .8})));
   pivot.add(gm); pivot.visible = false;
   Object.assign(placeTgt, {pivot, objId: m.userData.objId, c: c.clone(), sent: false});
 }
