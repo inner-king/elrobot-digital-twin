@@ -1039,7 +1039,7 @@ const PANEL_DEFS = {
       q(r, 'k-floor-note').textContent = f ? `고정 ${f.time} · ${f.n}회 평균 · 편차 ${f.spread_mm} mm` +
           (rf?.floor_rms_mm !== undefined ? ` · 평면 보정 RMS ${rf.floor_rms_mm} mm` : '') : '';
       const af = c.auto_floor;
-      q(r, 'k-frame').textContent = `y=0: ${f ? '마커 고정' : b?.T ? '마커 실시간' : af ? `자동 바닥 (점 ${af.pts})` : 'ARKit (바닥 미검출)'}`;
+      q(r, 'k-frame').textContent = `y=0: ${f ? '마커 고정' : b?.T ? '마커 실시간' : af ? `자동 ${af.kind || '바닥'} (점 ${af.pts}${af.kind && af.kind !== '바닥' ? ` · 실제 바닥보다 ${Math.round((af.y - af.lowest_y) * 100)} cm 위` : ''})` : 'ARKit (바닥 미검출)'}`;
       q(r, 'k-tags').innerHTML = tags.length ? tags.map(([id, t]) => `<div class="mono">ID ${id} · ${t.dist_m.toFixed(3)} m</div>`).join('') : '검출된 태그 없음';
     },
   },

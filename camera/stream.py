@@ -28,6 +28,8 @@ FRAME_TIMEOUT_S = 2.0   # "connected" = a frame arrived within this window
 # automatic floor: lowest strong horizontal surface in the gravity-aligned (ARKit y-up) height histogram
 AF_BIN_M, AF_RANGE_M, AF_DECAY = 0.01, 4.0, 0.97
 AF_MIN_SHARE = 0.05     # a floor peak must hold ≥5 % of the strongest peak (floor is often only partly visible)
+AF_CENTRE = 0.4         # [ours] work surface = the qualifying plane the middle 40 % of the image looks at most
+AF_SWITCH = 1.5         # another plane takes over only when it is looked at this much more
 AF_MIN_POINTS = 300
 STRIDE = 2            # depth subsampling: 256×192 → 128×96 ≈ 12k points
 MAX_DEPTH_M = 2.5
@@ -104,6 +106,7 @@ class CameraStream:
         self.status["board"] = None           # live detection
         self.status["floor"] = None           # locked floor frame (valid for this ARKit session only)
         self._af_hist = np.zeros(int(2 * AF_RANGE_M / AF_BIN_M))
+        self._af_centre = np.zeros_like(self._af_hist)
         self.status["auto_floor"] = None
         self.recon = Reconstructor()
         self.status["recon"] = self.recon.status
@@ -256,7 +259,8 @@ class CameraStream:
         tags = self._detect_tags(color, K, T)
         self._nproc += 1
         self._last_world_pts = pw
-        self._update_auto_floor(pw)
+        cen = (np.abs(u / dw - 0.5) < AF_CENTRE / 2) & (np.abs(v / dh - 0.5) < AF_CENTRE / 2)
+        self._update_auto_floor(pw, cen)
         fl, af = self.status.get("floor"), self.status.get("auto_floor")
         self.recon.floor_y = fl["T"][1][3] if fl else af["y"] if af else None     # ARKit y (gravity-up) of the floor
         if self.recon.status["running"]:
@@ -279,28 +283,41 @@ class CameraStream:
             self.T_world_cam = T
             self.status.update(points=int(len(pw)), tags=tags)
 
-    def _update_auto_floor(self, pw):
-        """Floor height in ARKit world: gravity is y, a horizontal surface is a sharp peak in the y histogram."""
+    def _update_auto_floor(self, pw, centre=None):
+        """Support height in ARKit world: gravity is y, a horizontal surface is a sharp peak in the y histogram.
+        [ours] Of the qualifying peaks, the one the middle of the image looks at most is the work surface: a table
+        top in a room (the lowest peak — the room's floor 0.7 m below — made the whole table one piece of furniture,
+        and nothing on it was split off). Lowest peak = the real floor, still reported."""
         if len(pw) < AF_MIN_POINTS:
             return
         y = pw[:, 1].astype(np.float64)
         h, _ = np.histogram(y, bins=len(self._af_hist), range=(-AF_RANGE_M, AF_RANGE_M))
         self._af_hist = self._af_hist * AF_DECAY + h
+        if centre is not None and centre.any():
+            hc, _ = np.histogram(y[centre], bins=len(self._af_hist), range=(-AF_RANGE_M, AF_RANGE_M))
+            self._af_centre = self._af_centre * AF_DECAY + hc
         sm = np.convolve(self._af_hist, [1, 2, 1], mode="same") / 4
         # steady-state of the decayed sum is n/(1-decay): require ≈100 points per frame in the bin as well
         thr = max(sm.max() * AF_MIN_SHARE, 100 / (1 - AF_DECAY))
         peaks = np.nonzero((sm >= thr) & (sm >= np.roll(sm, 1)) & (sm >= np.roll(sm, -1)))[0]
         if not len(peaks):
             return
-        k = peaks.min()                                              # lowest qualifying peak
+        lowest = int(peaks.min())
+        sc = np.convolve(self._af_centre, [1, 2, 1, 2, 1], mode="same")
+        score = sc[peaks]
+        k = int(peaks[np.argmax(score)]) if score.max() > 0 else lowest
+        prev = self.status.get("auto_floor")
+        if prev and "k" in prev and prev["k"] in set(peaks.tolist()) and sc[k] < AF_SWITCH * sc[prev["k"]]:
+            k = prev["k"]                                            # keep the current surface unless clearly beaten
         y0 = -AF_RANGE_M + (k + 0.5) * AF_BIN_M
         near = y[np.abs(y - y0) < 0.015]
         if len(near) >= AF_MIN_POINTS // 3:
             y0 = float(np.median(near))
-        prev = self.status.get("auto_floor")
         if prev and abs(prev["y"] - y0) < 0.03:                      # smooth small changes, jump on big ones
             y0 = 0.8 * prev["y"] + 0.2 * y0
-        self.status["auto_floor"] = {"y": round(y0, 4), "pts": int(len(near)),
+        self.status["auto_floor"] = {"y": round(y0, 4), "pts": int(len(near)), "k": k,
+                                     "kind": "바닥" if k == lowest else "작업면 (책상 등)",
+                                     "lowest_y": round(-AF_RANGE_M + (lowest + 0.5) * AF_BIN_M, 3),
                                      "share": round(float(sm[k] / sm.max()), 2),
                                      "is_lowest_peak_strongest": bool(sm[k] == sm.max())}
 

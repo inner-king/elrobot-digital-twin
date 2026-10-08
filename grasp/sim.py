@@ -89,14 +89,22 @@ def decompose(V, T, pitch=DECOMP_PITCH):
     k = int(np.clip(np.ceil(np.ptp(C, axis=0).max() / 0.02) * 2, 2, 32))
     k = min(k, len(C) // 8)
     _, lab = kmeans2(C, k, minit="++", seed=0)
-    corners = np.array([[a, b, c] for a in (-1, 1) for b in (-1, 1) for c in (-1, 1)], float) * pitch / 2
+    # each piece = hull of its voxel centres + the mesh's own surface vertices nearest to it: the surface, not the
+    # voxels' corners (a 6 mm staircase the pads caught on: strawberry and carrot slipped, 0.1 kg hull held)
+    from scipy.spatial import cKDTree
+    cen = np.array([C[lab == j].mean(axis=0) if (lab == j).any() else np.full(3, np.inf) for j in range(k)])
+    _, sv = cKDTree(C).query(np.asarray(m.vertices))          # surface vertex → its nearest voxel's piece
+    slab = lab[sv]
     parts, counts = [], []
     for j in range(k):
-        Q = C[lab == j]
-        if len(Q) < 2:
+        Q = np.vstack([C[lab == j], np.asarray(m.vertices)[slab == j]])
+        if len(Q) < 4:
             continue
-        parts.append(trimesh.convex.convex_hull((Q[:, None, :] + corners).reshape(-1, 3)))
-        counts.append(len(Q))
+        try:
+            parts.append(trimesh.convex.convex_hull(Q))
+        except Exception:
+            continue
+        counts.append(int((lab == j).sum()))
     return parts, counts, float(len(C) * pitch ** 3)
 
 
