@@ -74,6 +74,7 @@ class GraspManager:
         self.world = VirtualWorld(self)   # live physics of the solid robot + objects (vs. the prediction's ghosts)
         self.state["world"] = self.world.status
         self._world_T, self._world_t = None, 0.0
+        self._world_lock = threading.Lock()
         self._sel_oid = None
         self._sel = None          # (points_base, tris, click_base, up_base, T_base_world)
         self._seg = None          # (obj_idx, support, env_idx) when the object came from the reconstruction
@@ -170,15 +171,19 @@ class GraspManager:
             self.state["registration"] = reg
             REG_FILE.write_text(json.dumps(reg))
         elif t == "grasp_select":
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError("실행 중입니다 — 끝난 뒤에 다시 선택하세요")
             self._select(c)
         elif t == "grasp_plan":
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError("실행 중입니다 — 끝난 뒤에 다시 계획하세요")
             self._plan()
         elif t == "grasp_exec":
             self._execute()
         elif t in ("grasp_go", "grasp_pick", "grasp_place"):
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError("이미 실행 중입니다")
             if t in ("grasp_pick", "grasp_place"):  # right-click / gizmo move on an object: select + plan + execute
-                if self._thread and self._thread.is_alive():
-                    raise RuntimeError("이미 실행 중입니다")
                 self._select(c)
             D = None
             if t == "grasp_place":
@@ -190,28 +195,31 @@ class GraspManager:
                 raise RuntimeError(self.state.get("error") or "파지 계획 실패")
             sim = self.state["plan"].get("sim") or {}
             if sim.get("verdict") == "안 들림":       # [ours] the prediction says this would only knock the object
-                self.state["error"] = "물리 예측: 안 들림 → 자동 실행 안 함 (파지 탭 '실행'으로 강제 실행 가능)"
+                self.state["error"] = "물리 예측: 안 들림 (밀어내기만 함) → 실행 안 함 — 다른 물체나 자세로 시도하세요"
                 raise RuntimeError(self.state["error"])
             pl = sim.get("place")
             if D is not None and pl is not None and not pl.get("ok"):
-                self.state["error"] = (f"물리 예측: 목표에서 {pl['err_mm']} mm / {pl['err_deg']}° 어긋남 → 자동 실행 안 함 "
-                                       "(파지 탭 '실행'으로 강제 실행 가능)")
-                raise RuntimeError(self.state["error"])
+                # held but predicted off target: run it anyway (the live physics decides), say so
+                self.state["warning"] = f"물리 예측: 목표에서 {pl['err_mm']} mm / {pl['err_deg']}° 어긋날 수 있음 — 그대로 실행"
             self._execute()
         elif t in ("grasp_world_start", "grasp_world_reset"):
             M_sw = np.array(c["M_scene_world"], float).reshape(4, 4)
             M_sb = np.array(c["M_scene_base"], float).reshape(4, 4)
             T_new = np.linalg.inv(M_sb) @ M_sw
-            # several open consoles each ask for the (always-on) world: the same request within 5 s is one
-            if (t == "grasp_world_start" and self.world.status.get("running") and self._world_T is not None
-                    and np.allclose(T_new, self._world_T, atol=1e-4) and time.time() - self._world_t < 5):
-                return
-            self._world_T, self._world_t = T_new, time.time()
-            try:
-                self.world.start(self._world_T)
-            except Exception as e:
-                self.world.status.update(running=False, error=str(e))
-                raise
+            # several open consoles each ask for the (always-on) world: one build at a time, and the same request
+            # within 5 s of the last one is that one (two consoles had it built twice in the same second)
+            if self._thread and self._thread.is_alive():
+                return                                  # never under a running grasp
+            with self._world_lock:
+                if (t == "grasp_world_start" and self._world_T is not None and np.allclose(T_new, self._world_T, atol=1e-4)
+                        and time.time() - self._world_t < 5):
+                    return
+                self._world_T, self._world_t = T_new, time.time()
+                try:
+                    self.world.start(self._world_T)
+                except Exception as e:
+                    self.world.status.update(running=False, error=str(e))
+                    raise
         elif t == "grasp_world_stop":
             self.world.stop()
         elif t == "grasp_cancel":
@@ -322,7 +330,7 @@ class GraspManager:
         if self._sel is None:
             raise RuntimeError("먼저 물체를 선택하세요")
         pb, tris, click, up, T_bw = self._sel
-        self.state.update(stage="planning", error=None)
+        self.state.update(stage="planning", error=None, warning=None)
         q0 = self.q_now()
         t0 = time.time()
         best, tried, place_fail, failed = None, [], [], []

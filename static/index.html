@@ -264,15 +264,12 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
   </header>
 
   <aside id="left">
-    <div class="tabs"><div class="tablist" id="ltabs">
-      <button class="tab on" data-l="motors"><span class="ic">memory</span><span class="tn">모터</span></button>
-      <button class="tab" data-l="objects"><span class="ic">category</span><span class="tn">객체</span> <span class="muted mono" id="obj-count"></span></button></div></div>
-    <div class="lpane on" data-l="motors">
-      <div class="list-h"><h3>모터 <span class="muted mono" id="online"></span></h3>
+    <div class="lpane on objs" data-l="scene">
+      <div class="list-h" id="robot-head" title="더블클릭: 로봇 시점"><h3><span class="ic" style="font-size:18px;vertical-align:-3px">precision_manufacturing</span> ElRobot <span class="muted mono" id="online"></span></h3>
         <button class="small" id="all-on" title="전체 토크 ON"><span class="ic">power</span>ON</button></div>
       <div id="motors"></div>
+      <div id="hier-list"></div>
     </div>
-    <div class="lpane objs" data-l="objects"><div id="hier-list"></div></div>
   </aside>
 
   <main>
@@ -316,6 +313,29 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
   <div class="body" id="pipeline"></div>
 </div></div>
 <div class="tip" id="tip"></div>
+<template id="tpl-obj"><section class="pane">
+  <div data-k="i-motor">
+      <div class="hero"><span class="t" data-k="d-title"></span><span class="s" data-k="d-status"></span></div>
+      <div class="deg" data-k="d-deg">—</div>
+      <div class="muted mono" style="font-size:12px" data-k="d-raw"></div>
+      <canvas class="spark" data-k="spark"></canvas>
+      <div class="legend"><span><i style="background:var(--info)"></i>위치</span><span><i style="background:var(--accent)"></i>부하</span><span><i style="background:var(--bad)"></i>전류</span><span style="margin-left:auto">최근 10초</span></div>
+      <div class="metrics" data-k="d-metrics"></div>
+      <div data-k="d-notes"></div>
+      <details><summary><span class="lbl"><span class="ic">memory</span>레지스터</span></summary><div class="kv" data-k="d-regs"></div>
+        <div class="btns"><button class="small" data-k="refresh"><span class="ic">refresh</span>EEPROM</button></div></details>
+</div>
+  <div data-k="i-obj" style="display:none">
+    <div class="hero"><span class="t" data-k="o-title"></span><span class="s" data-k="o-status"></span></div>
+    <div class="muted mono" style="font-size:12px;margin:2px 0 8px" data-k="o-sub"></div>
+    <div class="btns">
+      <button class="small primary" data-k="o-pick" title="계획 → 물리 예측 → 실행 (우클릭과 같음)"><span class="ic">back_hand</span>집기</button>
+      <button class="small" data-k="o-move" title="목표 기즈모 (W 이동 · E 회전 · Enter 실행)"><span class="ic">move_location</span>옮기기</button>
+      <button class="small" data-k="o-ai" title="AI 복원 (TripoSR → 관측과 융합)"><span class="ic">auto_awesome</span>AI 복원</button>
+      <button class="small icon" data-k="o-focus" title="시점 맞추기"><span class="ic">center_focus_strong</span></button></div>
+    <div class="kv" data-k="o-kv"></div>
+  </div>
+</section></template>
 <template id="tpl-motor"><section class="pane">
       <div class="hero"><span class="t" data-k="d-title"></span><span class="s" data-k="d-status"></span></div>
       <div class="deg" data-k="d-deg">—</div>
@@ -389,8 +409,7 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
   <h4><span class="ic">view_in_ar</span>복원</h4>
   <div class="kv" data-k="k-recon"></div>
   <div class="btns">
-    <button class="small primary" data-k="k-rstart"><span class="ic">play_arrow</span>시작</button>
-    <button class="small" data-k="k-rstop"><span class="ic">stop</span>정지</button>
+    <span class="muted" style="font-size:11px;align-self:center">카메라가 연결되면 항상 복원</span>
     <button class="small" data-k="k-rreset"><span class="ic">restart_alt</span>초기화</button>
   </div>
   <div class="setrow"><span class="lbl"><span class="ic">landscape</span>배경 메시</span><input type="checkbox" data-k="k-mesh" checked></div>
@@ -916,10 +935,18 @@ function toggleOpen(id){
   document.querySelectorAll('.motor').forEach(e => e.classList.toggle('open', +e.dataset.id === openId));
   select(id);
 }
+// [ours] what the right-hand 객체 panel shows: a motor or a reconstructed object
+let inspect = {kind: 'motor', id: 1};
+let hierKey = null;                          // (declared here: select(1) runs before the object list code)
 function select(id){
-  sel = id;
+  sel = id; inspect = {kind: 'motor', id};
   document.querySelectorAll('.motor').forEach(e => e.classList.toggle('sel', +e.dataset.id === id));
-  paintRobot(); if(S) renderPanels('motor');
+  hierKey = null; paintRobot(); if(S) renderPanels('obj');
+}
+function inspectObject(id){
+  inspect = {kind: 'object', id};
+  document.querySelectorAll('.motor').forEach(e => e.classList.remove('sel'));
+  hierKey = null; if(S){ renderHier(); renderPanels('obj'); }
 }
 function renderList(){
   let online = 0;
@@ -946,6 +973,45 @@ const kv = rows => rows.map(r => r.length === 1 ? `<div class="grp">${r[0]}</div
 const fmtSet = {speed: v => `${v} st/s`, accel: v => `${v}`, tl: v => `${(v / 10).toFixed(0)}%`};
 
 const PANEL_DEFS = {
+  obj: {
+    name: '객체', icon: 'category',
+    init(P){
+      PANEL_DEFS.motor.init(P);
+      const r = P.root, cur = () => inspect.kind === 'object' ? objInfo(inspect.id) : null;
+      q(r, 'o-pick').addEventListener('click', () => { const o = cur(); if(o) pick(objTop(o), `물체 #${o.id}`, o.id); });
+      q(r, 'o-move').addEventListener('click', () => { const o = cur(), m = o && reconObjs.children.find(x => x.userData.objId === o.id);
+        if(m){ if(placeTgt.objId !== o.id || placeTgt.sent) makePlaceTarget(m); setGizmo('object'); toast('물체를 끌어 목표로 → Enter'); } });
+      q(r, 'o-ai').addEventListener('click', () => { const o = cur(); if(o?.inst){ send({type: 'detect_model', id: o.inst}); toast('AI 복원: 처음 누르면 생성, 다시 누르면 AI ↔ 기하 전환'); } });
+      q(r, 'o-focus').addEventListener('click', () => { const o = cur(); if(o) focusOn(objTop(o)); });
+    },
+    render(P){
+      const r = P.root, isObj = inspect.kind === 'object';
+      q(r, 'i-motor').style.display = isObj ? 'none' : '';
+      q(r, 'i-obj').style.display = isObj ? '' : 'none';
+      if(!isObj) return PANEL_DEFS.motor.render(P);
+      const o = objInfo(inspect.id);
+      if(!o){ q(r, 'o-title').textContent = `물체 #${inspect.id}`; q(r, 'o-status').innerHTML = '<span class="muted">지금 장면에 없음</span>'; q(r, 'o-kv').innerHTML = ''; return; }
+      q(r, 'o-title').textContent = o.label ? o.label.name : `물체 #${o.id}`;
+      q(r, 'o-status').innerHTML = o.committed ? '<span style="color:var(--ok)">확정 · 자세 추적</span>' : '<span class="muted">복원 중</span>';
+      q(r, 'o-sub').textContent = `#${o.id} · ${shapeText(o)}`;
+      q(r, 'o-ai').disabled = !o.inst;
+      const g = S.grasp || {}, mine = g.object?.obj_id === o.id;
+      const vm = g.virtual_moved?.[o.id];
+      q(r, 'o-kv').innerHTML = kv([
+        ['라벨', o.label ? `${esc(o.label.name)} ${Math.round(o.label.conf * 100)}%` : '— (인식 꺼짐)'],
+        ['관측 크기', `${o.size_mm.join(' × ')} mm`],
+        ['완성 형태', shapeText(o) + (o.rms_mm != null ? ` · 오차 ${o.rms_mm} mm` : '')],
+        ['위치 (ARKit)', o.centre.map(x => x.toFixed(3)).join(', ') + ' m'],
+        ['받침', o.support_mm ? `작업면 위 ${o.support_mm} mm (다른 물체 위)` : '작업면'],
+        ['본 각도', o.coverage_deg != null ? `${o.coverage_deg}°` : '-'],
+        ...(o.committed ? [['추적 맞춤', o.track_fit != null ? `${Math.round(o.track_fit * 100)}%${o.track_ms != null ? ` · ${o.track_ms} ms` : ''}` : '-']] : []),
+        ...(o.model_vs_geo ? [['일관성 AI / 기하', `${o.model_vs_geo[0]} / ${o.model_vs_geo[1]} mm`]] : []),
+        ...(vm ? [['가상 이동', '가상 로봇이 옮김 (취소하면 원위치)']] : []),
+        ...(mine && g.stage && g.stage !== 'idle' ? [['파지', `${({selected: '선택됨', planning: '계획 중', planned: '계획됨', executing: '실행 중', done: '완료'})[g.stage] || g.stage}${g.exec?.label ? ' · ' + g.exec.label : ''}${g.plan?.sim?.verdict ? ' · 예측 ' + g.plan.sim.verdict : ''}`]] : []),
+        ...(mine && g.error ? [['오류', `<span style="color:var(--bad)">${esc(g.error)}</span>`]] : []),
+      ]);
+    },
+  },
   sys: {
     name: '시스템', icon: 'dns',
     init(P){
@@ -970,7 +1036,9 @@ const PANEL_DEFS = {
       if(!P.rEditing) q(P.root, 'r-src').value = S.robot_source || 'auto';
       q(P.root, 'r-state').textContent = S.connected ? `연결됨: ${S.port}` : (S.error || '연결 안 됨');
       const w = S.grasp?.world || {};
-      q(P.root, 'g-world').innerHTML = kv([['물리 세계', w.running ? `<span style="color:var(--ok)">켜짐</span> · 물체 ${w.objects} · 실시간 ×${w.rt_factor ?? '-'}`
+      const te = Object.entries(w.track_err_mm || {});
+      q(P.root, 'g-world').innerHTML = kv([...(w.running && te.length ? [['카메라 추적 오차', te.map(([id, [h, v]]) => `#${id} 수평 ${h} · 높이 ${v} mm`).join('<br>')]] : []),
+        ['물리 세계', w.running ? `<span style="color:var(--ok)">켜짐</span> · 물체 ${w.objects} · 실시간 ×${w.rt_factor ?? '-'}`
         : S.robot_source !== 'virtual' ? '꺼짐 (가상 로봇일 때 켜짐)' : (w.error ? `<span style="color:var(--bad)">${esc(w.error)}</span>` : '대기 (확정된 물체가 생기면 켜짐)')]]);
       PANEL_DEFS.calib.render(P);
       if(P.drag) return;
@@ -1091,8 +1159,6 @@ const PANEL_DEFS = {
       q(r, 'k-complete').addEventListener('change', e => setShowComplete(e.target.checked));
       q(r, 'k-fill').addEventListener('change', e => {
         showFill = e.target.checked; floorPhoto.visible = showFill && !!floorPhotoVer; fillMesh.visible = showFill && !floorPhotoVer; });
-      q(r, 'k-rstart').addEventListener('click', () => send({type:'recon_start'}));
-      q(r, 'k-rstop').addEventListener('click', () => send({type:'recon_stop'}));
       q(r, 'k-rreset').addEventListener('click', () => send({type:'recon_reset'}));
       q(r, 'k-size').addEventListener('input', e => { cloudMat.size = +e.target.value / 1000; });
       q(r, 'k-fit').addEventListener('click', fitCloud);
@@ -1153,7 +1219,7 @@ const PANEL_DEFS = {
     },
   },
 };
-const PANEL_ORDER = ['sys', 'motor', 'log', 'ctrl', 'cam'];   // calibration: inside 시스템 · grasping: right-click
+const PANEL_ORDER = ['obj', 'sys', 'log', 'ctrl', 'cam'];   // calibration: inside 시스템 · grasping: right-click
 
 function drawSpark(canvas){
   const h = hist[sel], dpr = devicePixelRatio, W = canvas.clientWidth * dpr, H = canvas.clientHeight * dpr;
@@ -1206,10 +1272,13 @@ $('#cam-reset').addEventListener('click', resetCam);
 // ---------------------------------------------------------------- docks (right sidebar / bottom bar)
 const DOCKS = ['right', 'bottom'];
 const DOCK_NAMES = {right:'오른쪽', bottom:'하단'};
-const DEFAULT_LAYOUT = {right:['motor', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'motor', bottom:'ctrl'}};
+const DEFAULT_LAYOUT = {right:['obj', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'obj', bottom:'ctrl'}};
 let layout = structuredClone(DEFAULT_LAYOUT);
 try { const l = JSON.parse(localStorage.getItem('elrobot.layout')); if(l?.right && l?.bottom && l?.active) layout = l; } catch {}
-for(const d of DOCKS) layout[d] = layout[d].filter(id => PANEL_ORDER.includes(id));   // panels removed since (calib, grasp)
+for(const d of DOCKS){                       // panels renamed / removed since: motor → obj, calib, grasp
+  layout[d] = [...new Set(layout[d].map(id => id === 'motor' ? 'obj' : id))].filter(id => PANEL_ORDER.includes(id));
+  if(layout.active[d] === 'motor') layout.active[d] = 'obj';
+}
 for(const id of ['cam'])   // panels added after layouts were saved
   if(!layout.right.includes(id) && !layout.bottom.includes(id)) layout.right.push(id);
 const dockEl = d => document.querySelector(`.dock[data-dock="${d}"]`);
@@ -1691,6 +1760,7 @@ renderer.domElement.addEventListener('pointerup', e => {
     const rr = robot ? raycaster.intersectObject(robot, true).find(i => i.object.isMesh && !i.object.userData.overlay && shown(i.object)) : null;  // rayHit set the ray
     if(rr && (!h || rr.distance < h.distance)){ setGizmo('robot'); toast('로봇 위치 기즈모 — W 이동 · E 회전 · 놓으면 정합 저장'); return; }
     if(oid){
+      inspectObject(oid);
       send({...clickMsg('grasp_select', h.point), obj_id: oid});
       if(placeTgt.objId !== oid || placeTgt.sent) makePlaceTarget(h.object);
       setGizmo('object'); toast('물체를 끌어 목표 위치로 → 반투명 목표 · 옮기기 실행 (Enter)');
@@ -1709,13 +1779,12 @@ renderer.domElement.addEventListener('pointerup', e => {
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
 // left sidebar tabs: 모터 | 객체
-function setLeftTab(k){
+function setLeftTab(k){                     // (one pane since motors + objects were merged; kept for old calls)
   document.querySelectorAll('#ltabs .tab').forEach(t => t.classList.toggle('on', t.dataset.l === k));
   document.querySelectorAll('#left .lpane').forEach(p => p.classList.toggle('on', p.dataset.l === k));
   try { localStorage.setItem('elrobot.left', k); } catch(e) {}
 }
-$('#ltabs').addEventListener('click', e => { const k = e.target.closest('[data-l]')?.dataset.l; if(k) setLeftTab(k); });
-try { const k = localStorage.getItem('elrobot.left'); if(k) setLeftTab(k); } catch(e) {}
+$('#robot-head').addEventListener('dblclick', e => { if(!e.target.closest('button')) resetCam(); });
 // 객체 tab: robot, iPhone, reconstructed objects — hover highlights, click selects/focuses, right-click or 집기 grasps
 function focusOn(center, r = 0.12){
   const dir = camera.position.clone().sub(controls.target).normalize();
@@ -1723,20 +1792,17 @@ function focusOn(center, r = 0.12){
   controls.update();
 }
 const objTop = o => { world.updateMatrixWorld(true); return new THREE.Vector3(o.centre[0], o.centre[1] + o.size_mm[1] / 2000 - 0.004, o.centre[2]).applyMatrix4(world.matrixWorld); };
-let hierKey = null;
 function renderHier(){
   const objs = [...(S?.camera?.recon?.objects || [])].sort((a, b) => a.id - b.id), g = S?.grasp || {};   // stable order
   const stage = {planning: '계획 중', planned: '계획됨', executing: g.exec?.step ? `실행 ${g.exec.step}/${g.exec.of}` : '실행 중', done: '완료'}[g.stage] || '';
   const selC = g.object?.centre_base;
-  const key = JSON.stringify([objs.map(o => [o.id, o.dims_mm, o.label?.name, o.label?.conf]), (S?.camera?.detect?.tracks || []).map(t => [t.id, t.hits]), stage, selC, S?.connected, S?.camera?.connected]);
+  const key = JSON.stringify([objs.map(o => [o.id, o.dims_mm, o.label?.name, o.label?.conf]), (S?.camera?.detect?.tracks || []).map(t => [t.id, t.hits]), stage, selC, S?.connected, S?.camera?.connected, inspect]);
   if(key === hierKey) return;
   hierKey = key;
-  $('#obj-count').textContent = objs.length || '';
   const rows = [`<div class="gh">장치</div>`,
-    `<div class="it" data-act="robot" title="시점 맞추기"><span class="ic">precision_manufacturing</span><span class="nm">ElRobot</span><span class="meta">${S?.connected ? (S.robot_source === 'virtual' ? '가상' : 'USB') : '끊김'}</span></div>`,
-    `<div class="it" data-act="phone" title="iPhone 시점"><span class="ic">photo_camera</span><span class="nm">iPhone</span><span class="meta">${S?.camera?.connected ? S.camera.link : '없음'}</span></div>`,
+    `<div class="it" data-act="phone" title="더블클릭: iPhone 시점"><span class="ic">photo_camera</span><span class="nm">iPhone</span><span class="meta">${S?.camera?.connected ? S.camera.link : '없음'}</span></div>`,
     `<div class="gh">물체 ${objs.length ? `· ${objs.length}` : ''}</div>`,
-    ...objs.map(o => `<div class="it" data-obj="${o.id}" title="클릭 선택 · 우클릭 집기"><span class="sw" style="background:#${OBJ_COLORS[o.id % OBJ_COLORS.length].toString(16).padStart(6, '0')}"></span>
+    ...objs.map(o => `<div class="it${inspect.kind === 'object' && inspect.id === o.id ? ' sel' : ''}" data-obj="${o.id}" title="클릭 선택 · 더블클릭 시점 · 우클릭 집기"><span class="sw" style="background:#${OBJ_COLORS[o.id % OBJ_COLORS.length].toString(16).padStart(6, '0')}"></span>
       <span class="nm">${o.label ? `${esc(o.label.name)} <span class="meta">${Math.round(o.label.conf * 100)}%</span>` : `물체 #${o.id}`}<br><span class="meta">#${o.id} · ${shapeText(o)}${o.model_vs_geo ? ` · 일관성 AI ${o.model_vs_geo[0]} / 기하 ${o.model_vs_geo[1]}` : ''}</span></span>${o.inst ? `<button class="small icon" data-ai="${o.inst}" title="AI 복원 (TripoSR → 실제 크기 정렬)"><span class="ic">auto_awesome</span></button>` : ''}<button class="small" data-pick="${o.id}" title="바로 집기"><span class="ic">back_hand</span>집기</button></div>`)];
   const trks = S?.camera?.detect?.tracks || [];
   if(trks.length) rows.push(`<div class="gh">마스크 물체 · 깊이로 안 잡힘 · ${trks.length}</div>`, ...trks.map(t => `<div class="it" style="cursor:default" title="인식 마스크를 3D로 올려 융합한 점 (${t.points}점)">
@@ -1753,12 +1819,17 @@ $('#hier-list').addEventListener('click', e => {
   const pb = e.target.closest('[data-pick]');
   if(pb){ const o = objInfo(+pb.dataset.pick); if(o) pick(objTop(o), `물체 #${o.id}`, o.id); return; }
   const it = e.target.closest('.it'); if(!it) return;
-  if(it.dataset.act === 'robot') return resetCam();
-  if(it.dataset.act === 'phone') return viewFromPhone();
+  if(it.dataset.act) return;                                   // devices: double-click only
   const o = objInfo(+it.dataset.obj); if(!o) return;
-  const p = objTop(o); focusOn(p); send({...clickMsg('grasp_select', p), obj_id: o.id});
+  inspectObject(o.id);                                         // one click: select (view stays)
+  send({...clickMsg('grasp_select', objTop(o)), obj_id: o.id});
   const m = reconObjs.children.find(x => x.userData.objId === o.id);
   if(m){ if(placeTgt.objId !== o.id || placeTgt.sent) makePlaceTarget(m); setGizmo('object'); }
+});
+$('#hier-list').addEventListener('dblclick', e => {             // double click: the view moves there
+  const it = e.target.closest('.it'); if(!it || e.target.closest('button')) return;
+  if(it.dataset.act === 'phone') return viewFromPhone();
+  const o = objInfo(+it.dataset.obj); if(o) focusOn(objTop(o));
 });
 $('#hier-list').addEventListener('contextmenu', e => {
   e.preventDefault();
@@ -1811,7 +1882,7 @@ const graspAxes = new THREE.AxesHelper(0.06); graspAxes.matrixAutoUpdate = false
 let graspPlanKey = null;
 // [ours] the physics world is always on with the virtual robot: built once objects are committed, rebuilt (after 3 s
 // of the same state, never mid-plan / mid-run) when the committed set or the registration changes
-let worldKey = null, worldPend = null, lastGraspErr = null;
+let worldKey = null, worldPend = null, lastGraspErr = null, lastGraspWarn = null;
 function startWorld(force){
   if(!robot || S?.robot_source !== 'virtual'){ if(force) toast('물리 세계는 가상 로봇일 때 켜집니다'); return; }
   world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
@@ -1823,18 +1894,24 @@ function autoWorld(g){
   if(S?.robot_source !== 'virtual' || !robot) return;
   const ids = (S.camera?.recon?.objects || []).filter(o => o.committed).map(o => o.id).sort((a, b) => a - b);
   if(!ids.length) return;
-  const key = JSON.stringify([ids, g.registration?.robot, g.registration?.world]);
-  if(key === worldKey && (g.world?.running || g.world?.error)){ worldPend = null; return; }   // built (or failed) for this
+  // rebuild for a new committed object the world lacks or a moved robot / world — not for one that vanished for a
+  // moment (a carried object floats: the reconstruction does not split it off; rebuilding then put it back)
+  const have = new Set(g.world?.ids || []), fresh = ids.filter(i => !have.has(i));
+  const key = JSON.stringify([g.world?.running ? fresh : ids, g.registration?.robot, g.registration?.world]);
+  if(g.world?.running && !fresh.length && key === worldKey){ worldPend = null; return; }
+  if(key === worldKey && g.world?.error){ worldPend = null; return; }                         // failed for this: no retry loop
   if(g.stage === 'planning' || g.stage === 'executing') return;
   if(worldPend?.key !== key){ worldPend = {key, t: performance.now()}; return; }
   if(performance.now() - worldPend.t < 3000) return;
-  worldKey = key; worldPend = null; startWorld(false);
+  worldPend = null; startWorld(false);
+  worldKey = JSON.stringify([[], g.registration?.robot, g.registration?.world]);   // after a build nothing is fresh
 }
 function renderGrasp(){
   const g = S?.grasp; if(!g) return;
   loadRegistration(); autoWorld(g);
   if(g.error && g.error !== lastGraspErr) toast(g.error);         // (the grasp panel is gone: right-click shows it here)
-  lastGraspErr = g.error;
+  if(g.warning && g.warning !== lastGraspWarn) toast(g.warning);
+  lastGraspErr = g.error; lastGraspWarn = g.warning;
   if(g.obj_version !== objVersion){ objVersion = g.obj_version; loadObject(); }
   syncGhost(g.plan); watchExecution(g); watchPlace(g); applyVirtualMoved();
   const key = JSON.stringify(g.plan?.frame || null);

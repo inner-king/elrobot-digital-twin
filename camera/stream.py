@@ -214,6 +214,8 @@ class CameraStream:
                     continue
                 self._last_frame_t = time.time()
                 self.status.update(connected=True, stage="스트리밍")
+                if not self.recon.status.get("running"):     # a camera on = the scene is reconstructed, always
+                    self.recon.handle({"type": "recon_start"})
                 n += 1
                 now = time.time()
                 if now - t0 >= 1.0:

@@ -109,7 +109,10 @@ class VirtualWorld:
         self._pose0 = {oid: (d.xpos[m.body(n).id].copy(), d.xmat[m.body(n).id].reshape(3, 3).copy()) for oid, n, _ in self._bodies}
         self._vm0 = {oid: self.gm._vmoved.get(oid, np.eye(4)).copy() for oid, _, _ in self._bodies}
         self._map_virtual()
-        self.status.update(objects=len(self._bodies), geoms=int(m.ngeom), build_ms=round((time.time() - t0) * 1000),
+        # recon centres (ARKit world, unmoved) at the build: the reference the tracking error is measured from
+        self._c0w = {o["id"]: np.linalg.inv(self._vm0.get(o["id"], np.eye(4)))[:3, :3] @ np.array(o["centre"])
+                     + np.linalg.inv(self._vm0.get(o["id"], np.eye(4)))[:3, 3] for o in (rc.status.get("objects") or [])}
+        self.status.update(objects=len(self._bodies), ids=[int(oid) for oid, _, _ in self._bodies], geoms=int(m.ngeom), build_ms=round((time.time() - t0) * 1000),
                            support_z=round(sup_z, 4), error=None)
 
     @staticmethod
@@ -213,6 +216,18 @@ class VirtualWorld:
                 self._vc.offset[kidx] = off0 + (Dw[:3, :3] @ c0 + Dw[:3, 3]) - c0
                 if hasattr(self._vc, "rot"):
                     self._vc.rot[kidx] = Dw[:3, :3] @ rot0
+        # [ours] how well the camera's tracking (recon) agrees with the physics (the truth in the virtual scene): top-view
+        # and height offset of each object's centre, mm — published for the console
+        rc = getattr(self.gm.cam, "recon", None)
+        if rc is not None and getattr(self, "_c0w", None) is not None:
+            rec = {o["id"]: np.array(o["centre"]) for o in rc.status.get("objects") or []}
+            err = {}
+            for oid, _, _ in self._bodies:
+                if oid in rec and oid in self._c0w:
+                    cw = moved[oid] @ np.r_[self._c0w[oid], 1.0]
+                    dlt = rec[oid] - cw[:3]
+                    err[str(oid)] = [round(float(np.hypot(dlt[0], dlt[2])) * 1000), round(float(dlt[1]) * 1000)]
+            self.status["track_err_mm"] = err
         if not self._vmap:                                            # real camera: the console shows the moved copies
             self.gm._vmoved.update(moved)
             self.gm.state["virtual_moved"] = {str(k): np.round(M, 5).ravel().tolist() for k, M in self.gm._vmoved.items()}
