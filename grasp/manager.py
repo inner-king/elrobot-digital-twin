@@ -70,6 +70,10 @@ class GraspManager:
         self.state = {"registration": reg, "stage": "idle", "error": None, "plan": None, "object": None,
                       "obj_version": 0, "exec": None, "virtual_moved": {}}
         self._vmoved = {}         # [ours] recon object id → 4×4 ARKit-world move done by the virtual robot (real camera)
+        from world import VirtualWorld
+        self.world = VirtualWorld(self)   # live physics of the solid robot + objects (vs. the prediction's ghosts)
+        self.state["world"] = self.world.status
+        self._world_T = None
         self._sel_oid = None
         self._sel = None          # (points_base, tris, click_base, up_base, T_base_world)
         self._seg = None          # (obj_idx, support, env_idx) when the object came from the reconstruction
@@ -194,6 +198,17 @@ class GraspManager:
                                        "(파지 탭 '실행'으로 강제 실행 가능)")
                 raise RuntimeError(self.state["error"])
             self._execute()
+        elif t in ("grasp_world_start", "grasp_world_reset"):
+            M_sw = np.array(c["M_scene_world"], float).reshape(4, 4)
+            M_sb = np.array(c["M_scene_base"], float).reshape(4, 4)
+            self._world_T = np.linalg.inv(M_sb) @ M_sw
+            try:
+                self.world.start(self._world_T)
+            except Exception as e:
+                self.world.status.update(running=False, error=str(e))
+                raise
+        elif t == "grasp_world_stop":
+            self.world.stop()
         elif t == "grasp_cancel":
             self._abort.set()
             self._vmoved.clear()
@@ -208,6 +223,8 @@ class GraspManager:
                 self.arm.bus.stall.clear()
             self.state.update(stage="idle", plan=None, object=None, error=None, exec=None)
             self._sel = self._obj_world = self._obj_mesh = None
+            if self.world.status.get("running") and self._world_T is not None:
+                self.world.start(self._world_T)          # the scene went back to its start: so does the physics
             self.state["obj_version"] += 1
 
     def _select(self, c):
@@ -476,7 +493,8 @@ class GraspManager:
         from motion import at, PAUSE_S
         sim = (self.state.get("plan") or {}).get("sim") or {}
         frames = np.array(sim.get("frames") or [])
-        vw = self._virtual_world() if len(frames) else None
+        live = self.world.status.get("running")        # live physics moves the objects itself: no replay over it
+        vw = self._virtual_world() if len(frames) and not live else None
         if vw:
             bus, vc, idx, T_wb = vw
             bus.stall.pop(8, None)
@@ -536,7 +554,7 @@ class GraspManager:
                 off = vc.offset.get(idx)                     # placed: resting on the same support as before
                 if off is not None:
                     vc.offset[idx] = np.array([off[0], base_off[1], off[2]])
-            if not vw and len(frames) and self._sel_oid is not None and self._seg is not None:
+            if not vw and not live and len(frames) and self._sel_oid is not None and self._seg is not None:
                 # [ours] real camera, virtual robot: the real object did not move — remember where the prediction left
                 # it (world frame), so the console shows it there and the next plan starts from there
                 def pose(f):

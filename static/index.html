@@ -379,6 +379,12 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
     <button class="small" data-k="g-auto" title="복원된 물체들이 팔에 닿도록 로봇을 작업면 위, 물체 건너편에 세움 (가상 로봇)"><span class="ic">precision_manufacturing</span>로봇 자동 배치</button>
   </div>
   <div class="kv" data-k="g-reg"></div>
+  <h4><span class="ic">deployed_code</span>물리 세계 <span class="muted" style="font-weight:400;font-size:11px">색 = 지금 상태 · 반투명 = 예측</span></h4>
+  <div class="kv" data-k="g-world"></div>
+  <div class="btns">
+    <button class="small" data-k="g-wstart" title="가상 로봇과 복원된 물체들을 실시간 물리로 (부딪히면 밀리고, 집으면 들림)"><span class="ic">play_arrow</span>켜기 / 다시 구성</button>
+    <button class="small" data-k="g-wstop"><span class="ic">stop</span>끄기</button>
+  </div>
   <h4><span class="ic">back_hand</span>파지</h4>
   <div class="kv" data-k="g-state"></div>
   <div class="btns">
@@ -1172,6 +1178,13 @@ const PANEL_DEFS = {
       });
       q(r, 'g-preview').addEventListener('click', playPreview);
       q(r, 'g-auto').addEventListener('click', autoPlaceRobot);
+      q(r, 'g-wstart').addEventListener('click', () => {
+        if(!robot) return;
+        world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
+        send({type: 'grasp_world_start', M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)});
+        toast('물리 세계: 복원된 물체들로 구성 중…');
+      });
+      q(r, 'g-wstop').addEventListener('click', () => send({type: 'grasp_world_stop'}));
       q(r, 'g-exec').addEventListener('click', () => {
         if(confirm('실제 로봇 실행: 접근 → 하강 → 닫기 → 들기\n중단: STOP / Esc')) send({type:'grasp_exec'});
       });
@@ -1201,6 +1214,9 @@ const PANEL_DEFS = {
       if(ex) rows.push(['실행', ex.step ? `${ex.step}/${ex.of} ${ex.label} (${ex.duration_s}s)` : ex.label]);
       if(g.error) rows.push(['오류', `<span style="color:var(--bad)">${esc(g.error)}</span>`]);
       q(r, 'g-state').innerHTML = kv(rows);
+      const w = g.world || {};
+      q(r, 'g-world').innerHTML = kv([['상태', w.running ? `<span style="color:var(--ok)">켜짐</span> · 물체 ${w.objects} · 실시간 ×${w.rt_factor ?? '-'}` : (w.error ? `<span style="color:var(--bad)">${esc(w.error)}</span>` : '꺼짐')],
+        ...(w.running ? [['구성', `볼록 조각 ${w.geoms}개 · ${w.build_ms} ms`]] : [])]);
       q(r, 'g-preview').disabled = q(r, 'g-exec').disabled = !(p && p.q_grasp) || g.stage === 'executing';
     },
   },

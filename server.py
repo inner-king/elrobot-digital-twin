@@ -579,8 +579,10 @@ async def ws(sock: WebSocket):
                     await asyncio.to_thread(grasp.handle, c)   # planning takes ~0.1–2 s; keep the socket responsive
                     if c["type"] != "reg_set":
                         arm.log({"grasp_select": "물체 선택", "grasp_plan": "파지 계획", "grasp_exec": "파지 실행 시작",
-                                 "grasp_go": "집기: 계획 후 실행 시작",
-                                 "grasp_cancel": "파지 취소"}[c["type"]] + (f": {grasp.state['error']}" if grasp.state.get("error") else ""))
+                                 "grasp_go": "집기: 계획 후 실행 시작", "grasp_pick": "집기", "grasp_place": "옮기기",
+                                 "grasp_world_start": "물리 세계 시작", "grasp_world_reset": "물리 세계 다시 구성",
+                                 "grasp_world_stop": "물리 세계 정지",
+                                 "grasp_cancel": "파지 취소"}.get(c["type"], c["type"]) + (f": {grasp.state['error']}" if grasp.state.get("error") else ""))
                 except Exception as e:
                     arm.log(f"명령 실패 {c['type']}: {e}")
                 continue
