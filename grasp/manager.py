@@ -73,7 +73,7 @@ class GraspManager:
         from world import VirtualWorld
         self.world = VirtualWorld(self)   # live physics of the solid robot + objects (vs. the prediction's ghosts)
         self.state["world"] = self.world.status
-        self._world_T = None
+        self._world_T, self._world_t = None, 0.0
         self._sel_oid = None
         self._sel = None          # (points_base, tris, click_base, up_base, T_base_world)
         self._seg = None          # (obj_idx, support, env_idx) when the object came from the reconstruction
@@ -201,7 +201,12 @@ class GraspManager:
         elif t in ("grasp_world_start", "grasp_world_reset"):
             M_sw = np.array(c["M_scene_world"], float).reshape(4, 4)
             M_sb = np.array(c["M_scene_base"], float).reshape(4, 4)
-            self._world_T = np.linalg.inv(M_sb) @ M_sw
+            T_new = np.linalg.inv(M_sb) @ M_sw
+            # several open consoles each ask for the (always-on) world: the same request within 5 s is one
+            if (t == "grasp_world_start" and self.world.status.get("running") and self._world_T is not None
+                    and np.allclose(T_new, self._world_T, atol=1e-4) and time.time() - self._world_t < 5):
+                return
+            self._world_T, self._world_t = T_new, time.time()
             try:
                 self.world.start(self._world_T)
             except Exception as e:

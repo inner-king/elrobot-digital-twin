@@ -327,7 +327,24 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
       <details><summary><span class="lbl"><span class="ic">memory</span>레지스터</span></summary><div class="kv" data-k="d-regs"></div>
         <div class="btns"><button class="small" data-k="refresh"><span class="ic">refresh</span>EEPROM</button></div></details>
     </section></template>
-<template id="tpl-calib"><section class="pane">
+<template id="tpl-sys"><section class="pane">
+      <h4><span class="ic">cable</span>로봇 연결</h4>
+      <div style="display:flex;gap:6px">
+        <select data-k="r-src" style="flex:1;font:12px var(--mono);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)"></select>
+        <button class="small" data-k="r-apply"><span class="ic">link</span>연결</button></div>
+      <div class="muted" style="font-size:11px;margin:4px 0 0" data-k="r-state"></div>
+      <h4><span class="ic">tune</span>제어 <span class="muted" style="font-weight:400">· 전체 공통</span></h4>
+      <div class="setrow"><span class="lbl"><span class="ic">speed</span>속도</span><b class="mono" data-k="v-speed"></b></div>
+      <input type="range" class="plain" data-k="s-speed" min="50" max="2000" step="50" style="width:100%">
+      <div class="setrow" title="0 = 제한 없음"><span class="lbl"><span class="ic">trending_up</span>가속</span><b class="mono" data-k="v-accel"></b></div>
+      <input type="range" class="plain" data-k="s-accel" min="0" max="254" step="2" style="width:100%">
+      <div class="setrow" title="모터별 상한: 1–7번 60%, 8번 25% (7.4V 서보)"><span class="lbl"><span class="ic">fitness_center</span>토크 제한</span><b class="mono" data-k="v-tl"></b></div>
+      <input type="range" class="plain" data-k="s-tl" min="0" max="1000" step="10" style="width:100%">
+      <h4><span class="ic">precision_manufacturing</span>배치 · 물리 세계</h4>
+      <div class="btns"><button class="small" data-k="g-auto" title="복원된 물체들이 팔에 닿도록 로봇을 작업면 위, 물체 건너편에 세움 (가상 로봇)"><span class="ic">precision_manufacturing</span>로봇 자동 배치</button>
+        <button class="small" data-k="g-wstart" title="물리 세계를 지금 복원 상태로 다시 구성"><span class="ic">refresh</span>물리 세계 다시 구성</button></div>
+      <div class="kv" data-k="g-world"></div>
+      <h3 style="margin:16px 0 4px;font-size:13px"><span class="ic">straighten</span> 캘리브레이션</h3>
       <h4><span class="ic">description</span>사용 중</h4>
       <div class="card" data-k="c-active"></div>
       <h4><span class="ic">folder_open</span>파일</h4>
@@ -351,48 +368,10 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
       <div data-k="c-table"></div>
       <h4><span class="ic">data_object</span>원문 <span class="muted mono" style="font-weight:400" data-k="c-path"></span></h4>
       <pre class="raw" data-k="c-raw"></pre>
-    </section></template>
-<template id="tpl-sys"><section class="pane">
-      <h4><span class="ic">cable</span>로봇 연결</h4>
-      <div style="display:flex;gap:6px">
-        <select data-k="r-src" style="flex:1;font:12px var(--mono);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)"></select>
-        <button class="small" data-k="r-apply"><span class="ic">link</span>연결</button></div>
-      <div class="muted" style="font-size:11px;margin:4px 0 0" data-k="r-state"></div>
-      <h4><span class="ic">tune</span>제어 <span class="muted" style="font-weight:400">· 전체 공통</span></h4>
-      <div class="setrow"><span class="lbl"><span class="ic">speed</span>속도</span><b class="mono" data-k="v-speed"></b></div>
-      <input type="range" class="plain" data-k="s-speed" min="50" max="2000" step="50" style="width:100%">
-      <div class="setrow" title="0 = 제한 없음"><span class="lbl"><span class="ic">trending_up</span>가속</span><b class="mono" data-k="v-accel"></b></div>
-      <input type="range" class="plain" data-k="s-accel" min="0" max="254" step="2" style="width:100%">
-      <div class="setrow" title="모터별 상한: 1–7번 60%, 8번 25% (7.4V 서보)"><span class="lbl"><span class="ic">fitness_center</span>토크 제한</span><b class="mono" data-k="v-tl"></b></div>
-      <input type="range" class="plain" data-k="s-tl" min="0" max="1000" step="10" style="width:100%">
+
     </section></template>
 <template id="tpl-ctrl"><section class="pane"><div class="ctrl"></div></section></template>
 <template id="tpl-log"><section class="pane logpane"></section></template>
-<template id="tpl-grasp"><section class="pane">
-  <h4><span class="ic">open_with</span>좌표계 정렬</h4>
-  <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <select data-k="g-target" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
-      <option value="none">조정 안 함</option><option value="robot">로봇</option><option value="world">iPhone 월드</option></select>
-    <select data-k="g-mode" style="font:12px var(--sans);padding:5px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
-      <option value="translate">이동</option><option value="rotate">회전</option></select>
-    <button class="icon small" data-k="g-reset" title="선택 대상 초기화"><span class="ic">restart_alt</span></button>
-    <button class="small" data-k="g-auto" title="복원된 물체들이 팔에 닿도록 로봇을 작업면 위, 물체 건너편에 세움 (가상 로봇)"><span class="ic">precision_manufacturing</span>로봇 자동 배치</button>
-  </div>
-  <div class="kv" data-k="g-reg"></div>
-  <h4><span class="ic">deployed_code</span>물리 세계 <span class="muted" style="font-weight:400;font-size:11px">색 = 지금 상태 · 반투명 = 예측</span></h4>
-  <div class="kv" data-k="g-world"></div>
-  <div class="btns">
-    <button class="small" data-k="g-wstart" title="가상 로봇과 복원된 물체들을 실시간 물리로 (부딪히면 밀리고, 집으면 들림)"><span class="ic">play_arrow</span>켜기 / 다시 구성</button>
-    <button class="small" data-k="g-wstop"><span class="ic">stop</span>끄기</button>
-  </div>
-  <h4><span class="ic">back_hand</span>파지</h4>
-  <div class="kv" data-k="g-state"></div>
-  <div class="btns">
-    <button class="small" data-k="g-preview" title="가상 로봇 + 물리 예측 재생 (2배속)"><span class="ic">play_circle</span>미리보기</button>
-    <button class="small primary" data-k="g-exec" title="실제 로봇 실행"><span class="ic">play_arrow</span>실행</button>
-    <button class="small" data-k="g-cancel"><span class="ic">close</span>취소</button>
-  </div>
-</section></template>
 <template id="tpl-cam"><section class="pane">
   <div class="hero"><span class="t lbl"><span class="ic">photo_camera</span>iPhone LiDAR</span><span class="s" data-k="k-status"></span></div>
   <div style="display:flex;gap:6px;align-items:center;margin-top:10px">
@@ -977,6 +956,9 @@ const PANEL_DEFS = {
         el.addEventListener('input', () => { P.drag = true; q(P.root, `v-${k}`).textContent = fmtSet[k](+el.value); });
         el.addEventListener('change', () => { P.drag = false; send({type:'settings', speed:+q(P.root, 's-speed').value, accel:+q(P.root, 's-accel').value, torque_limit:+q(P.root, 's-tl').value}); });
       }
+      q(P.root, 'g-auto').addEventListener('click', autoPlaceRobot);
+      q(P.root, 'g-wstart').addEventListener('click', () => { worldKey = null; startWorld(true); });
+      PANEL_DEFS.calib.init(P);                       // calibration lives in this panel now
     },
     render(P){
       const ports = S.ports || [], key = JSON.stringify(ports);
@@ -987,6 +969,10 @@ const PANEL_DEFS = {
       }
       if(!P.rEditing) q(P.root, 'r-src').value = S.robot_source || 'auto';
       q(P.root, 'r-state').textContent = S.connected ? `연결됨: ${S.port}` : (S.error || '연결 안 됨');
+      const w = S.grasp?.world || {};
+      q(P.root, 'g-world').innerHTML = kv([['물리 세계', w.running ? `<span style="color:var(--ok)">켜짐</span> · 물체 ${w.objects} · 실시간 ×${w.rt_factor ?? '-'}`
+        : S.robot_source !== 'virtual' ? '꺼짐 (가상 로봇일 때 켜짐)' : (w.error ? `<span style="color:var(--bad)">${esc(w.error)}</span>` : '대기 (확정된 물체가 생기면 켜짐)')]]);
+      PANEL_DEFS.calib.render(P);
       if(P.drag) return;
       const st = S.settings, vals = {speed:st.speed, accel:st.accel, tl:st.torque_limit};
       for(const k in vals){ q(P.root, `s-${k}`).value = vals[k]; q(P.root, `v-${k}`).textContent = fmtSet[k](vals[k]); }
@@ -1020,7 +1006,7 @@ const PANEL_DEFS = {
       drawSpark(q(r, 'spark'));
     },
   },
-  calib: {
+  calib: {        // not a tab of its own: init/render run inside the 시스템 panel (its markup is in tpl-sys)
     name: '캘리브레이션', icon: 'straighten',
     init(P){
       const r = P.root;
@@ -1166,62 +1152,8 @@ const PANEL_DEFS = {
       q(r, 'k-tags').innerHTML = tags.length ? tags.map(([id, t]) => `<div class="mono">ID ${id} · ${t.dist_m.toFixed(3)} m</div>`).join('') : '검출된 태그 없음';
     },
   },
-  grasp: {
-    name: '파지', icon: 'back_hand',
-    init(P){
-      const r = P.root;
-      q(r, 'g-target').addEventListener('change', e => setGizmo(e.target.value, q(r, 'g-mode').value));
-      q(r, 'g-mode').addEventListener('change', e => setGizmo(q(r, 'g-target').value, e.target.value));
-      q(r, 'g-reset').addEventListener('click', () => {
-        const t = q(r, 'g-target').value; if(t === 'none') return;
-        (t === 'robot' ? robotRoot : worldAdj).matrix.identity(); saveRegistration();
-      });
-      q(r, 'g-preview').addEventListener('click', playPreview);
-      q(r, 'g-auto').addEventListener('click', autoPlaceRobot);
-      q(r, 'g-wstart').addEventListener('click', () => {
-        if(!robot) return;
-        world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
-        send({type: 'grasp_world_start', M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)});
-        toast('물리 세계: 복원된 물체들로 구성 중…');
-      });
-      q(r, 'g-wstop').addEventListener('click', () => send({type: 'grasp_world_stop'}));
-      q(r, 'g-exec').addEventListener('click', () => {
-        if(confirm('실제 로봇 실행: 접근 → 하강 → 닫기 → 들기\n중단: STOP / Esc')) send({type:'grasp_exec'});
-      });
-      q(r, 'g-cancel').addEventListener('click', () => send({type:'grasp_cancel'}));
-    },
-    render(P){
-      const r = P.root, g = S.grasp || {};
-      const pose = m => { const p = new THREE.Vector3(), qq = new THREE.Quaternion(), sc = new THREE.Vector3(); m.decompose(p, qq, sc);
-        const e = new THREE.Euler().setFromQuaternion(qq, 'YXZ'); return `x ${(p.x*100).toFixed(1)} · y ${(p.y*100).toFixed(1)} · z ${(p.z*100).toFixed(1)} cm · yaw ${THREE.MathUtils.radToDeg(e.y).toFixed(1)}°`; };
-      q(r, 'g-reg').innerHTML = kv([['로봇', pose(robotRoot.matrix)], ['iPhone 월드', pose(worldAdj.matrix)]]);
-      const o = g.object, p = g.plan, ex = g.exec;
-      const rows = [['단계', {idle: '대기', selected: '물체 선택됨', planning: '계획 중…', planned: '계획 완료', executing: '실행 중', done: '완료', disabled: '비활성'}[g.stage] || g.stage]];
-      if(o) rows.push(['물체', `${o.points}점 (${o.source}) · 크기 ${o.size_mm.join('×')} mm`]);
-      if(o?.tsdf) rows.push(['물체 TSDF', o.tsdf.error ? `<span style="color:var(--bad)">${esc(o.tsdf.error)}</span>`
-        : `${o.tsdf.voxel_mm} mm 복셀 · ${o.tsdf.verts.toLocaleString()} 정점 · 키프레임 ${o.tsdf.keyframes} · ${o.tsdf.size_mm?.join('×')} mm · ${o.tsdf.ms} ms`]);
-      if(p && p.surface) rows.push(['표면 / 후보', `${p.surface} · 후보 ${p.candidates} · 충돌 없음 ${p.collision_free_tried} · IK 통과 ${p.ik_ok}`],
-        ['파지', `폭 ${p.width_mm} mm · 롤 ${p.roll_deg}° · gear ${p.gear}`], ['접근 / 들기', `${p.approach_mm} mm / ${p.lift_mm} mm`],
-        ['IK 오차', `${p.ik_err_mm.join(' / ')} mm · ${p.ik_err_deg.join(' / ')}°`], ['계획 시간', `${p.ms} ms`],
-        ...(p.sim ? (p.sim.error ? [['물리 예측', `<span style="color:var(--bad)">${esc(p.sim.error)}</span>`]]
-          : [['물리 예측', `<b style="color:${p.sim.held ? 'var(--ok)' : p.sim.lift_mm > 5 ? 'var(--accent)' : 'var(--bad)'}">${p.sim.verdict}</b>`],
-             ['예측 들림 / 집게 접촉', `${p.sim.lift_mm} / ${p.sim.planned_lift_mm} mm · ${p.sim.jaw_contacts}`],
-             ['최대 집게력 · 추종 오차', `${p.sim.peak_jaw_force_n ?? '-'} N · ${p.sim.max_track_err_deg ?? '-'}°`],
-             ['검증한 후보', (p.sim_tried || []).map(t => `${t.width_mm} mm/${t.roll_deg}° ${t.verdict}`).join('<br>')],
-             ['처음 닿은 곳', (p.sim.segments || []).filter(sg => sg.first_hit).map(sg => `${sg.step}: ${sg.first_hit.body.replace('_v1_1', '')} @TCP ${sg.first_hit.tcp_mm.join(', ')} mm`).join('<br>') || '-'],
-             ['예측 가정', `${esc(p.sim.assumptions)} · ${p.sim.ms} ms`]]) : []));
-      else if(p && p.tried) rows.push(['시도', p.tried.map(t => `${t.surface} 후보 ${t.candidates}${t.collision_free !== undefined ? ` · 충돌없음 ${t.collision_free} · IK ${t.ik_ok}` : ''}`).join(' / ')]);
-      if(ex) rows.push(['실행', ex.step ? `${ex.step}/${ex.of} ${ex.label} (${ex.duration_s}s)` : ex.label]);
-      if(g.error) rows.push(['오류', `<span style="color:var(--bad)">${esc(g.error)}</span>`]);
-      q(r, 'g-state').innerHTML = kv(rows);
-      const w = g.world || {};
-      q(r, 'g-world').innerHTML = kv([['상태', w.running ? `<span style="color:var(--ok)">켜짐</span> · 물체 ${w.objects} · 실시간 ×${w.rt_factor ?? '-'}` : (w.error ? `<span style="color:var(--bad)">${esc(w.error)}</span>` : '꺼짐')],
-        ...(w.running ? [['구성', `볼록 조각 ${w.geoms}개 · ${w.build_ms} ms`]] : [])]);
-      q(r, 'g-preview').disabled = q(r, 'g-exec').disabled = !(p && p.q_grasp) || g.stage === 'executing';
-    },
-  },
 };
-const PANEL_ORDER = ['sys', 'motor', 'calib', 'log', 'ctrl', 'cam', 'grasp'];
+const PANEL_ORDER = ['sys', 'motor', 'log', 'ctrl', 'cam'];   // calibration: inside 시스템 · grasping: right-click
 
 function drawSpark(canvas){
   const h = hist[sel], dpr = devicePixelRatio, W = canvas.clientWidth * dpr, H = canvas.clientHeight * dpr;
@@ -1274,10 +1206,11 @@ $('#cam-reset').addEventListener('click', resetCam);
 // ---------------------------------------------------------------- docks (right sidebar / bottom bar)
 const DOCKS = ['right', 'bottom'];
 const DOCK_NAMES = {right:'오른쪽', bottom:'하단'};
-const DEFAULT_LAYOUT = {right:['motor', 'calib', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'motor', bottom:'ctrl'}};
+const DEFAULT_LAYOUT = {right:['motor', 'sys', 'cam'], bottom:['ctrl', 'log'], active:{right:'motor', bottom:'ctrl'}};
 let layout = structuredClone(DEFAULT_LAYOUT);
 try { const l = JSON.parse(localStorage.getItem('elrobot.layout')); if(l?.right && l?.bottom && l?.active) layout = l; } catch {}
-for(const id of ['cam', 'grasp'])   // panels added after layouts were saved
+for(const d of DOCKS) layout[d] = layout[d].filter(id => PANEL_ORDER.includes(id));   // panels removed since (calib, grasp)
+for(const id of ['cam'])   // panels added after layouts were saved
   if(!layout.right.includes(id) && !layout.bottom.includes(id)) layout.right.push(id);
 const dockEl = d => document.querySelector(`.dock[data-dock="${d}"]`);
 const inst = {right:{}, bottom:{}};  // dock -> panel id -> {root, ...render cache}
@@ -1876,9 +1809,32 @@ const baseEmissive = m => m.userData.objId === selObjId ? 0x6b2a00 : 0x000000;
 // planned gripper frame (base frame) → axes + pre-grasp line under the robot
 const graspAxes = new THREE.AxesHelper(0.06); graspAxes.matrixAutoUpdate = false; graspAxes.visible = false;
 let graspPlanKey = null;
+// [ours] the physics world is always on with the virtual robot: built once objects are committed, rebuilt (after 3 s
+// of the same state, never mid-plan / mid-run) when the committed set or the registration changes
+let worldKey = null, worldPend = null, lastGraspErr = null;
+function startWorld(force){
+  if(!robot || S?.robot_source !== 'virtual'){ if(force) toast('물리 세계는 가상 로봇일 때 켜집니다'); return; }
+  world.updateMatrixWorld(true); robot.updateMatrixWorld(true);
+  send({type: 'grasp_world_start', M_scene_world: rowMajor(world.matrixWorld), M_scene_base: rowMajor(robot.matrixWorld)});
+  if(force) toast('물리 세계: 지금 복원 상태로 다시 구성');
+}
+function autoWorld(g){
+  if(S?.robot_source !== 'virtual' && g.world?.running){ send({type: 'grasp_world_stop'}); return; }   // real robot: off
+  if(S?.robot_source !== 'virtual' || !robot) return;
+  const ids = (S.camera?.recon?.objects || []).filter(o => o.committed).map(o => o.id).sort((a, b) => a - b);
+  if(!ids.length) return;
+  const key = JSON.stringify([ids, g.registration?.robot, g.registration?.world]);
+  if(key === worldKey && (g.world?.running || g.world?.error)){ worldPend = null; return; }   // built (or failed) for this
+  if(g.stage === 'planning' || g.stage === 'executing') return;
+  if(worldPend?.key !== key){ worldPend = {key, t: performance.now()}; return; }
+  if(performance.now() - worldPend.t < 3000) return;
+  worldKey = key; worldPend = null; startWorld(false);
+}
 function renderGrasp(){
   const g = S?.grasp; if(!g) return;
-  loadRegistration();
+  loadRegistration(); autoWorld(g);
+  if(g.error && g.error !== lastGraspErr) toast(g.error);         // (the grasp panel is gone: right-click shows it here)
+  lastGraspErr = g.error;
   if(g.obj_version !== objVersion){ objVersion = g.obj_version; loadObject(); }
   syncGhost(g.plan); watchExecution(g); watchPlace(g); applyVirtualMoved();
   const key = JSON.stringify(g.plan?.frame || null);
