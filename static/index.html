@@ -423,10 +423,10 @@ textarea.vocab{width:100%;height:110px;font:11px/1.5 var(--mono);border:1px soli
     <button class="small" data-k="k-dstop"><span class="ic">stop</span>정지</button>
     <button class="small" data-k="k-dreset" title="누적된 종류 투표·마스크 물체 지우기"><span class="ic">restart_alt</span>초기화</button>
   </div>
-  <div class="setrow" title="Prompt Depth Anything: LiDAR를 프롬프트로 RGB 해상도 깊이 (인식 프레임에만, 물체 인스턴스용). 가상 장면에서는 LiDAR가 이미 깨끗해 이득 없음 (측정)">
+  <div class="setrow" title="물체 인식 마스크용 깊이 향상 (LiDAR는 항상 수신, 3D 복원 · 추적에는 쓰지 않음). PromptDA가 컬러 + LiDAR로 컬러 해상도 깊이를 만듦. 실제 iPhone 프레임 측정: S 194 ms, L 1,382 ms / 프레임 (Mac GPU)">
     <span class="lbl"><span class="ic">deblur</span>깊이 향상</span>
     <select data-k="k-depth" style="font:12px var(--sans);padding:4px 6px;border:1px solid var(--line2);border-radius:6px;background:var(--bg)">
-      <option value="off">끔 (LiDAR)</option><option value="small">PromptDA Small</option><option value="large">PromptDA Large</option></select></div>
+      <option value="off">사용 안 함</option><option value="small">PromptDA-S (≈0.2 s)</option><option value="large">PromptDA-L (≈1.4 s)</option></select></div>
   <details style="margin-top:10px"><summary><span class="lbl"><span class="ic">translate</span>인식 어휘 (영어=한국어, 한 줄에 하나)</span></summary>
     <textarea class="vocab" data-k="k-vocab" spellcheck="false"></textarea>
     <div class="btns"><button class="small" data-k="k-vapply"><span class="ic">check</span>적용</button></div></details>
@@ -594,13 +594,15 @@ async function loadReconObjects(){
 // (server state grasp.virtual_moved: object id → 4×4 ARKit-world move); the camera still sees the real one in place
 let vmKey = null;
 const realCam = () => S?.camera?.link && S.camera.link !== 'virtual';
+// [ours] reality layer: committed objects are tracked in 6-DoF by the reconstructor (camera.recon.poses: id → 4×4 move
+// since the mesh in /recon_objects was made), not rebuilt — applied every state update
 function applyVirtualMoved(force){
-  const vm = S?.grasp?.virtual_moved || {}, key = JSON.stringify(vm);
+  const vm = S?.grasp?.virtual_moved || {}, ps = S?.camera?.recon?.poses || {}, key = JSON.stringify([vm, ps]);
   if(!force && key === vmKey) return;
   vmKey = key;
   for(const m of reconObjs.children){
     if(m.userData.animating) continue;
-    const a = vm[m.userData.objId];
+    const a = vm[m.userData.objId] || ps[m.userData.objId];
     m.matrixAutoUpdate = false;
     if(a) m.matrix.fromArray(a).transpose(); else m.matrix.identity();
     m.matrixWorldNeedsUpdate = true;
@@ -1160,6 +1162,7 @@ const PANEL_DEFS = {
       q(r, 'k-fill').addEventListener('change', e => {
         showFill = e.target.checked; floorPhoto.visible = showFill && !!floorPhotoVer; fillMesh.visible = showFill && !floorPhotoVer; });
       q(r, 'k-rreset').addEventListener('click', () => send({type:'recon_reset'}));
+      q(r, 'k-metrics').addEventListener('click', e => { const b = e.target.closest('[data-raw]'); if(b) send({type:'cam_raw', on: b.dataset.raw === '1'}); });
       q(r, 'k-size').addEventListener('input', e => { cloudMat.size = +e.target.value / 1000; });
       q(r, 'k-fit').addEventListener('click', fitCloud);
       q(r, 'k-phone').addEventListener('click', viewFromPhone);
@@ -1174,7 +1177,7 @@ const PANEL_DEFS = {
       if(optKey !== P.optKey && !P.editing){   // USB iPhones appear in the list automatically
         P.optKey = optKey;
         q(r, 'k-link').innerHTML = (devs.length ? devs.map(d => `<option value="usb">USB · iPhone ${esc(d.serial.slice(0, 8))}…</option>`).join('')
-            : '<option value="usb">USB (연결된 iPhone 없음)</option>') + '<option value="wifi">WiFi (IP 입력)</option><option value="virtual">가상 카메라</option>';
+            : (c.link === 'usb' && c.connected ? '<option value="usb">USB · iPhone 스트리밍 중</option>' : '<option value="usb">USB (연결된 iPhone 없음)</option>')) + '<option value="wifi">WiFi (IP 입력)</option><option value="virtual">가상 카메라</option>';
       }
       if(!P.editing){ q(r, 'k-link').value = c.link || 'usb'; q(r, 'k-host').value = c.host || ''; P.syncHost(); }
       q(r, 'k-virtual').style.display = c.link === 'virtual' ? '' : 'none';
@@ -1183,6 +1186,8 @@ const PANEL_DEFS = {
       q(r, 'k-metrics').innerHTML = [
         ['수신', `${c.fps ?? 0} fps`], ['화면 갱신', `${camInfo.hz} Hz`], ['점 개수', `${(camInfo.n || 0).toLocaleString()}`],
         ['연결', c.link === 'wifi' ? `WiFi ${esc(c.host || '')}` : linkName], ['깊이 신뢰도', c.confidence ? '사용' : '미제공 (전부 사용)'], ['로봇', S.connected ? '연결됨' : '없음'],
+        ['원본 저장', (w => !w ? '-' : (w.on ? `${w.frames.toLocaleString()}장 · ${(w.bytes / 1e9).toFixed(2)} GB${w.dropped ? ` · 누락 ${w.dropped}` : ''}${w.free_gb != null ? ` · 여유 ${w.free_gb} GB` : ''} <button class="btn" data-raw="0">끄기</button>`
+          : `꺼짐${w.error ? ` (${esc(w.error)})` : ''} <button class="btn" data-raw="1">켜기</button>`) + (w.dir ? `<div class="muted" style="font-size:11px">${esc(w.dir)}</div>` : ''))(c.raw)],
       ].map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
       q(r, 'k-size-v').textContent = `${(cloudMat.size * 1000).toFixed(1)} mm`;
       q(r, 'k-show').checked = cloud.visible;
@@ -1895,23 +1900,31 @@ function autoWorld(g){
   if(S?.robot_source !== 'virtual' && g.world?.running){ send({type: 'grasp_world_stop'}); return; }   // real robot: off
   if(S?.robot_source !== 'virtual' || !robot) return;
   const ids = (S.camera?.recon?.objects || []).filter(o => o.committed).map(o => o.id).sort((a, b) => a - b);
-  if(!ids.length) return;
+  // a connected camera with a floor is enough: the world starts with the robot and the floor, objects join as they
+  // are committed; a world built for another camera (session) is rebuilt
+  const camOk = S.camera?.connected && S.camera?.floor_y != null, sess = S.camera?.session;
+  if(!ids.length && !camOk) return;
+  if(g.world?.running && g.world.cam_session !== sess){ worldPend = null; return; }   // stopping itself (grasp/world.py)
   // rebuild for a new committed object the world lacks or a moved robot / world — not for one that vanished for a
   // moment (a carried object floats: the reconstruction does not split it off; rebuilding then put it back)
-  const have = new Set(g.world?.ids || []), fresh = ids.filter(i => !have.has(i));
+  // new = an id the world lacks AND not within 6 cm of any world body now (the reconstruction gave a carried strawberry a
+  // new id; rebuilding then put it back where the reconstruction last had it, out of the jaws)
+  const have = new Set(g.world?.ids || []), wc = Object.values(g.world?.centres || {});
+  const cen = Object.fromEntries((S.camera?.recon?.objects || []).map(o => [o.id, o.centre]));
+  const fresh = ids.filter(i => !have.has(i) && !(cen[i] && wc.some(c => Math.hypot(c[0] - cen[i][0], c[1] - cen[i][1], c[2] - cen[i][2]) < 0.06)));
   // a console opened while the world runs takes it over as it is (a reload rebuilt it and reset its state);
   // only a registration changed since this console saw it, or a new object, rebuild it
   const regK = JSON.stringify([g.registration?.robot, g.registration?.world]);
   if(worldRegSeen === null) worldRegSeen = regK;
   const regChanged = regK !== worldRegSeen;
-  const key = JSON.stringify([g.world?.running ? fresh : ids, regK]);
+  const key = JSON.stringify([g.world?.running ? fresh : ids, regK, sess]);
   if(g.world?.running && !fresh.length && !regChanged){ worldPend = null; worldKey = key; return; }
   if(key === worldKey && g.world?.error){ worldPend = null; return; }                         // failed for this: no retry loop
   if(g.stage === 'planning' || g.stage === 'executing') return;
   if(worldPend?.key !== key){ worldPend = {key, t: performance.now()}; return; }
   if(performance.now() - worldPend.t < 3000) return;
   worldPend = null; startWorld(false); worldRegSeen = regK;
-  worldKey = JSON.stringify([[], regK]);   // after a build nothing is fresh
+  worldKey = JSON.stringify([[], regK, sess]);   // after a build nothing is fresh
 }
 function renderGrasp(){
   const g = S?.grasp; if(!g) return;
@@ -1981,7 +1994,7 @@ function playSim(frames, speed = 1){      // replay the prediction: virtual robo
     if(t > T){
       const f = frames[frames.length - 1]; placeGhost(f); setGhostQ(f.slice(8, 16)); showHud(f, sim, mode, z0); playing = null;
       if(follow){ follow(f); for(const m of reconObjs.children) m.userData.animating = false; }
-      setTimeout(() => { if(playing === null){ setGhostQ(null); hud.classList.remove('show'); } }, 2500);
+      setTimeout(() => { if(playing === null){ setGhostQ(null); ghost.visible = false; hud.classList.remove('show'); } }, 2500);
       return;
     }
     const f = frames[Math.min(frames.length - 1, Math.floor(t * 20))];

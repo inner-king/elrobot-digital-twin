@@ -4,6 +4,8 @@ prediction (sim.simulate) that a plan replays.
 Input : the reconstruction's split objects (completed meshes, ARKit world), the robot ↔ world registration (T_base_world),
         the support height, the virtual servo bus (present joint positions, 20 Hz)
 Output: every object's pose, published ≈20 Hz:
+          status["poses"]: id → 4×4 ARKit-world move of the twin copy relative to the reconstruction's mesh served now
+                           (/recon_objects) — the console's 가상 / 계획 views draw the copy with it
           virtual camera (kitchen / boxes scene)  → its objects' offset / rot, so the reconstruction sees them move
           real camera + virtual robot             → manager._vmoved (the console shows the moved copy)
         and the jaws held back on an object (VirtualBus.stall), like the real servo stalling.
@@ -43,8 +45,9 @@ class VirtualWorld:
         from sim import arm_xml, decompose, DENSITY, MASS_RANGE, OBJ_MU, JAW_MU, STALL_NM
         rc = getattr(self.gm.cam, "recon", None) if self.gm.cam else None
         objs = (rc.status.get("objects") or []) if rc is not None else []
-        if not objs:
-            raise RuntimeError("복원된 물체가 없습니다 — 복원을 먼저 하세요")
+        if not objs and (rc is None or rc.floor_y is None):
+            raise RuntimeError("바닥을 찾는 중입니다 — 카메라로 바닥을 비춰 주세요")
+        self.status["cam_session"] = (self.gm.cam.status.get("session") if self.gm.cam else None)   # [ours] built for this camera
         t0 = time.time()
         spec = mujoco.MjSpec.from_string(arm_xml())
         spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
@@ -57,12 +60,15 @@ class VirtualWorld:
         spec.worldbody.add_geom(name="support", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[2, 2, 0.01], pos=[0, 0, sup_z],
                                 friction=[OBJ_MU, 0.005, 0.0001], contype=2, conaffinity=2)
         self._bodies = []                # (recon id, body name, centre (base) at start)
+        self._P0 = {}                    # recon id → its tracked pose when copied (None: not tracked)
         for o in objs:
             geo = rc.object_geometry(o["id"])
             if geo is None:
                 continue
             Vw, Tw, _, _ = geo
             Vw = np.asarray(Vw, float)
+            reg = rc.registry.get(o["id"]) or {}
+            self._P0[o["id"]] = reg["pose"].copy() if "mesh0" in reg else None    # the copy = the tracked mesh now
             Mv = self.gm._vmoved.get(o["id"])       # already moved by the virtual robot: start from there
             if Mv is not None:
                 Vw = Vw @ Mv[:3, :3].T + Mv[:3, 3]
@@ -81,8 +87,8 @@ class VirtualWorld:
                 body.add_geom(name=f"{name}_g{j}", type=mujoco.mjtGeom.mjGEOM_MESH, meshname=f"{name}_m{j}",
                               mass=mass * n_ / sum(counts), friction=[OBJ_MU, 0.005, ROLL_MU], condim=6, contype=3, conaffinity=3)
             self._bodies.append((o["id"], name, c))
-        if not self._bodies:
-            raise RuntimeError("물리 모델로 만들 수 있는 물체가 없습니다")
+        if objs and not self._bodies:
+            raise RuntimeError("물리 모델로 만들 수 있는 물체가 없습니다")   # (no objects yet: robot + floor only)
         m = spec.compile()
         m.opt.timestep = DT
         jaw = {m.body(n).id for n in ("Gripper_Jaw_01_v1_1", "Gripper_Jaw_02_v1_1")}
@@ -180,6 +186,13 @@ class VirtualWorld:
         n_pub = int(round(1 / (PUBLISH_HZ * DT)))
         t_wall, steps, k = time.time(), 0, 0
         while not self._stop.is_set():
+            cam = self.gm.cam
+            if cam is not None and cam.status.get("session") != self.status.get("cam_session"):
+                # [ours] a new camera: this world belongs to the old one — stop; the console rebuilds it for the new one
+                self.gm._vmoved.clear()
+                self.gm.state["virtual_moved"] = {}
+                self.status.update(running=False, error=None, stopped="카메라 변경")
+                return
             try:
                 q = self.gm.q_now()                    # the virtual servos' present positions
             except Exception:
@@ -228,6 +241,19 @@ class VirtualWorld:
                     dlt = rec[oid] - cw[:3]
                     err[str(oid)] = [round(float(np.hypot(dlt[0], dlt[2])) * 1000), round(float(dlt[1]) * 1000)]
             self.status["track_err_mm"] = err
+        # every body's centre now (ARKit world): a "new" reconstruction id this close to one is that body seen again
+        self.status["centres"] = {str(oid): np.round(moved[oid] @ np.r_[self._c0w.get(oid, np.zeros(3)), 1.0], 3)[:3].tolist()
+                                  for oid, _, _ in self._bodies if oid in getattr(self, "_c0w", {})}
+        # the twin copy relative to the mesh /recon_objects serves now (the tracker moved it since the copy was made)
+        poses = {}
+        for oid, _, _ in self._bodies:
+            M = moved[oid]
+            reg = (rc.registry.get(oid) or {}) if rc is not None else {}
+            P0 = self._P0.get(oid)
+            if P0 is not None and "blob_pose" in reg:
+                M = M @ P0 @ np.linalg.inv(reg["blob_pose"])
+            poses[str(oid)] = np.round(M, 5).ravel().tolist()
+        self.status["poses"] = poses
         if not self._vmap:                                            # real camera: the console shows the moved copies
             self.gm._vmoved.update(moved)
             self.gm.state["virtual_moved"] = {str(k): np.round(M, 5).ravel().tolist() for k, M in self.gm._vmoved.items()}

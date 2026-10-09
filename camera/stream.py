@@ -21,6 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent / "r3ds_sdk"))
 from sdk import IPhoneSensorClient  # noqa: E402  (personal-use SDK, see r3ds_sdk/SOURCE.txt)
 from recon import Reconstructor  # noqa: E402
+from rawlog import RawRecorder  # noqa: E402
 
 PORT = 8888
 CONFIG_FILE = Path(__file__).parent / "camera.json"   # {"link": "usb" | "wifi", "host": "<iPhone IP>"}
@@ -34,6 +35,10 @@ AF_MIN_POINTS = 300
 STRIDE = 2            # depth subsampling: 256×192 → 128×96 ≈ 12k points
 MAX_DEPTH_M = 2.5
 MIN_CONF = 1          # drop ARKit "low" confidence depth
+# [ours] frames kept out of the reconstruction (measured on the real iPhone: all-zero confidence maps arrive between
+# normal ones, and with no filter their flying pixels scattered black specks and merged desk items into one piece)
+BLACK_RGB_MEAN = 8           # mean colour below this: a black frame (session start / camera switching)
+FLY_REL, FLY_ABS_M = 0.03, 0.015   # depth this far from its 5×5 median (≥ abs, or ≥ rel × depth) is a flying pixel
 TAG_SIZE_M = 0.06     # printed AprilTag 36h11 black-square edge length
 # OpenCV camera (x right, y down, z forward) → ARKit camera (x right, y up, z backward)
 CV_TO_ARKIT = np.diag([1.0, -1.0, -1.0, 1.0])
@@ -96,6 +101,14 @@ class CameraStream:
         self.status.update(link=cfg.get("link", "usb"), host=cfg.get("host", ""), stage="시작", usb_devices=[],
                            virtual_hidden=[], virtual_scene=cfg.get("virtual_scene", "kitchen"), virtual_objects=[])
         self._virtual = None
+        # [ours] camera session: +1 for every new camera client (or a changed connection) — the physics world built
+        # for the previous camera stops itself and is rebuilt for this one (grasp/world.py)
+        self.status["session"] = 0
+        self._conf_seen = False      # this stream has sent a real (non-zero) confidence map
+        self.status["frame_stats"] = {"total": 0, "no_conf": 0, "black_rgb": 0, "used": 0}
+        self.status["floor_y"] = None
+        self.raw = RawRecorder()               # every received real-camera frame → captures/<ts>/ (rawlog.py)
+        self.status["raw"] = self.raw.status
         threading.Thread(target=self._watch_usb, daemon=True).start()
         self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
                                             cv2.aruco.DetectorParameters())
@@ -190,6 +203,14 @@ class CameraStream:
     def configure(self, link, host=""):
         if link not in ("usb", "wifi", "virtual"):
             raise RuntimeError(f"알 수 없는 연결 방식 {link}")
+        if (link, host.strip()) != (self.status.get("link"), self.status.get("host", "")):
+            # another camera = another world frame: its keyframes, floor and objects do not belong to the new one
+            self.recon.handle({"type": "recon_reset"})
+            self.detect.handle({"type": "detect_reset"})
+            self.status["floor"] = None
+            self._af_hist[:] = 0
+            self._af_centre[:] = 0
+            self.status["auto_floor"] = None
         self.status.update(link=link, host=host.strip())
         CONFIG_FILE.write_text(json.dumps({"link": link, "host": host.strip(), "virtual_scene": self.status.get("virtual_scene", "kitchen")}))
         try:
@@ -204,6 +225,8 @@ class CameraStream:
                 if self._client is None or not self._client.is_connected:
                     self.status.update(connected=False, fps=0.0)
                     self._client = self._connect()
+                    self.status["session"] += 1
+                    self.raw.new_session()
                     self.status.update(error=None, stage="연결됨, 프레임 대기")
                 f = self._client.wait_for_frame(timeout=1.0)
                 streaming = time.time() - self._last_frame_t < FRAME_TIMEOUT_S
@@ -213,6 +236,8 @@ class CameraStream:
                         self.status.update(fps=0.0, stage="연결됨, 앱에서 프레임이 안 옴")
                     continue
                 self._last_frame_t = time.time()
+                if self.status["link"] != "virtual":
+                    self.raw.put(f)                   # before the 10 Hz throttle: all frames
                 self.status.update(connected=True, stage="스트리밍")
                 if not self.recon.status.get("running"):     # a camera on = the scene is reconstructed, always
                     self.recon.handle({"type": "recon_start"})
@@ -243,6 +268,14 @@ class CameraStream:
         if conf is not None and (conf.shape != depth.shape or not conf.any()):
             conf = None
         self.status["confidence"] = conf is not None
+        fs = self.status["frame_stats"]
+        fs["total"] += 1
+        if conf is not None:
+            self._conf_seen = True
+        no_conf = conf is None and self._conf_seen        # a stream with confidence sent a frame without it
+        black = float(color[::8, ::8].mean()) < BLACK_RGB_MEAN
+        fs["no_conf"] += int(no_conf)
+        fs["black_rgb"] += int(black)
         dh, dw = depth.shape
         sx, sy = dw / K.width, dh / K.height   # intrinsics are given at RGB resolution
         fx, fy, cx, cy = K.fx * sx, K.fy * sy, K.ppx * sx, K.ppy * sy
@@ -266,10 +299,14 @@ class CameraStream:
         self._update_auto_floor(pw, cen)
         fl, af = self.status.get("floor"), self.status.get("auto_floor")
         self.recon.floor_y = fl["T"][1][3] if fl else af["y"] if af else None     # ARKit y (gravity-up) of the floor
-        if self.recon.status["running"]:
+        self.status["floor_y"] = self.recon.floor_y
+        if self.recon.status["running"] and not (no_conf or black):
+            fs["used"] += 1
             dclean = np.where(np.isfinite(depth) & (depth > 0.05) & (depth < MAX_DEPTH_M), depth, 0).astype(np.float32)
             if conf is not None:
                 dclean[conf < MIN_CONF] = 0
+            med = cv2.medianBlur(dclean, 5)                 # flying pixels at depth edges (always, conf or not)
+            dclean[np.abs(dclean - med) > np.maximum(FLY_ABS_M, FLY_REL * med)] = 0
             small = cv2.cvtColor(cv2.resize(color, (dw, dh), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
             self.recon.submit(dclean, small, fx, fy, cx, cy, T @ CV_TO_ARKIT)
             self.detect.submit(color, dclean, [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], T @ CV_TO_ARKIT)
@@ -519,6 +556,8 @@ class CameraStream:
             self._virtual.hidden ^= {i}
             self.status["virtual_hidden"] = sorted(self._virtual.hidden)
             return
+        if c["type"] == "cam_raw":                             # raw capture on / off (off closes the folder)
+            return self.raw.set_on(c.get("on", True))
         if c["type"].startswith("recon_"):
             return self.recon.handle(c)
         if c["type"].startswith("detect_"):
@@ -535,10 +574,6 @@ class CameraStream:
         elif c["type"] == "floor_clear":
             self.status["floor"] = None
 
-
-    def latest_packet(self):
-        with self.lock:
-            return self.packet
 
     def latest(self):
         with self.lock:

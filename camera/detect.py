@@ -43,6 +43,7 @@ DEFAULT_VOCAB = [  # en (prompt) → ko (display)
     ["plate", "접시"], ["spoon", "숟가락"], ["fork", "포크"], ["chopsticks", "젓가락"],
     ["tomato", "토마토"], ["onion", "양파"], ["potato", "감자"], ["cucumber", "오이"], ["frying pan", "프라이팬"],
     ["lemon", "레몬"], ["orange", "오렌지"], ["egg", "달걀"], ["sponge", "스펀지"],
+    ["laptop", "노트북"], ["computer mouse", "마우스"], ["milk carton", "우유팩"],   # desk test objects (real iPhone)
     # generic words ("box", "bottle", "can") pulled the pot / mug / apple to themselves in the kitchen test: left out
 ]
 

@@ -19,3 +19,7 @@ camera/camera.json
 robot.json
 registration.json
 camera/vocab.json
+
+# local captures of the live scene (photos of the room)
+captures/
+MUJOCO_LOG.TXT

@@ -1,4 +1,0 @@
-WARNING Thu Oct  8 21:11:42 2026: Insufficient arena memory for the number of constraints generated. Increase arena memory allocation above 16M bytes. Time = 0.0000.
-
-WARNING Thu Oct  8 21:12:36 2026: Insufficient arena memory for the number of constraints generated. Increase arena memory allocation above 16M bytes. Time = 0.0000.
-

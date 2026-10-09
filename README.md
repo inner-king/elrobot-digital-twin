@@ -82,7 +82,6 @@ uv run --with pyserial --with fastapi --with "uvicorn[standard]" --with numpy --
 
 - **서보 ID 설정:** 새 ST3215는 모두 ID 1입니다. 이미 조립된 상태라면 버스에 하나씩 추가하면서 바꾸고, 겹치지 않게 임시 ID를 씁니다.
 - **다른 기어비/용도로 쓰던 서보:** 그리퍼에 쓴 7.4V 서보가 `phase=76`이라 구동 방향이 센서와 반대였습니다 (목표를 주면 반대쪽 끝으로 밀어붙임). 나머지와 같은 `phase=12`로 쓰고 **전원을 껐다 켜야** 적용됩니다.
-- iPhone 앱이 NeRFCapture라면 CycloneDDS **0.10.x**로 맞춰야 합니다. 11.x의 탐색 메시지를 받으면 앱이 죽습니다 (`camera/nerfcapture_probe.py`). 단, App Store 버전은 Send 버튼을 누를 때 한 장씩만 보냅니다.
 
 ## 다음 단계
 

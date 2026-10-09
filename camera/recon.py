@@ -23,6 +23,11 @@ Dynamic scene handling (objects that move or disappear):
   3. Newest observation wins: each mesh vertex is checked against the newest (≤ 2) keyframes that observe it;
      when they all see *through* it (3×3 minimum depth deeper than the vertex by more than CARVE_TAU_M) the vertex
      is removed — the ghost of an object that moved or disappeared.
+  4. [ours] Committed objects are tracked, not rebuilt: every submitted frame (≤5 Hz) moves each committed mesh by
+     ICP to the depth points around it (track_now; 6-DoF pose = commit frame → now, with its history). The room
+     TSDF and new-object pieces are built from keyframes with every committed object masked out at its pose *at that
+     keyframe's time* — a stale view of a moved object no longer leaves a copy behind with a new id.
+     Input: depth frame + pose; output: status["poses"] (id → 4×4 relative to the mesh served in /recon_objects).
 """
 import threading
 import time
@@ -53,7 +58,7 @@ KF_REPLACE_M, KF_REPLACE_DEG = 0.04, 4.0
 EXTRACT_MIN_WEIGHT = 1.0                    # keyframes are mostly unique per place: one observation is enough
 KF_MAX = 200
 REBUILD_EVERY_S = 1.5
-CARVE_FRAMES, CARVE_TAU_M, CARVE_MIN = 15, 0.03, 2
+CARVE_FRAMES, CARVE_TAU_M = 15, 0.03
 OBJ_VOXEL_M, OBJ_KEYFRAMES, OBJ_MARGIN_M = 0.003, 40, 0.012
 COMPLETE_MODE = "auto"         # auto: carving when seen all around, else symmetry priors (+ observed faces kept)
 CARVE_MIN_COVER_DEG = 240
@@ -74,8 +79,26 @@ REG_STABLE, REG_UNLABELLED, REG_TTL_S = 3, 8, 60.0   # committing objects (see _
 MOVE_MATCH_M = 0.5             # a committed object not where it was: same-shape piece this far away (top view) = it, moved
 REFINE_COVER_DEG = 60          # a committed object is completed again once the views around it grew this much
 TRACK_MIN_FIT = 0.5
+# [ours] live 6-DoF tracking of committed objects (track_now)
+TRACK_HZ = 10                  # tracker thread poll (frames arrive at ≤ MAX_SUBMIT_HZ)
+TRACK_GATE_M = 0.03            # depth points this close to the predicted model are its observation
+TRACK_MIN_PTS = 60             # fewer observed points: not visible now, pose kept
+TRACK_MAX_RMSE_M = 0.006
+TRACK_DEAD_M, TRACK_DEAD_DEG = 0.0007, 0.5   # corrections below this are depth noise: pose kept (no jitter)
+# [ours] still = the pose it has explains the view: the observed points lie on the model at that pose (median distance
+# and share within 5 mm). Then ICP is not run at all — per-frame ICP on a one-sided view turned resting objects by
+# 50–140° over a 45 s camera sweep (round ones: nothing fixes their spin; measured on the virtual kitchen)
+STILL_MED_M, STILL_IN_M, STILL_SHARE = 0.003, 0.005, 0.85
+# a new pose must explain the view clearly better than the one it has (median distance ≤ this share and ≥ this much
+# lower): a symmetric pot otherwise took a 64° ICP turn from one grazing view as a "better" fit
+BETTER_REL, BETTER_ABS_M = 0.7, 0.0008
+EXPLAIN_M = 0.004              # a depth point this close to another committed object belongs to that one
+MASK_DIST_M = 0.008            # keyframe pixels this close to a committed model (at the keyframe's time) are masked
+RESID_M, RESID_SHARE = 0.015, 0.5   # a new piece mostly this close to a committed model is its rim, not an object
+LOST_MISSES = 5                # frames in a row seeing through where a committed object should be → lost (re-found
+                               # by shape when it shows up elsewhere, _assign_ids)
 INST_OWN = 0.3                 # …and at least this share of the instance's own points lie in that object
-INST_COVER = 0.5               # a geometric object this covered by a recognised instance is replaced by it          # a piece above whose top-view box covers this share of the support's: a container wall         # floor-band vertices snapped onto the floor plane
+INST_COVER = 0.5               # a geometric object this covered by a recognised instance is replaced by it
 FOOT_MARGIN_M = 0.015          # footprint margin cut out of the background under each object
 
 
@@ -155,7 +178,6 @@ class Reconstructor:
         self._floor_img = None       # floor orthophoto (bounds, png)
         self._floor_thread = None
         self.floor_y = None          # set by stream.py (ARKit world y of the floor)
-        self.object_points = {}      # object id → TSDF vertices (≤ 2000, ARKit world) for detect.py's association
         self.labeler = None          # detect.Detector.label(id) → {"name", "conf", ...} or None
         self.instances = None        # detect.Detector.instances() → recognised per-instance TSDFs
         self.registry = {}           # object id → committed mesh / label / pose (_commit, _track_registry)
@@ -164,8 +186,14 @@ class Reconstructor:
         self.status["objects"] = []
         self._last_submit = 0.0
         self._dirty = False
+        self._frame = None           # newest submitted frame (tracking input): depth, K, T, t
+        self._tracked = None
+        self._kfm = None             # keyframes with committed objects masked (newest rebuild)
+        self._track_lock = threading.Lock()   # poses: tracker thread vs re-finding in the rebuild
+        self.status["poses"] = {}
         if o3d is not None:
             threading.Thread(target=self._run, daemon=True).start()
+            threading.Thread(target=self._track_loop, daemon=True).start()
 
     # ---- called from the camera thread
     def submit(self, depth, rgb, fx, fy, cx, cy, T_world_cvcam):
@@ -177,6 +205,8 @@ class Reconstructor:
         self._last_submit = now
         self.status["frames"] += 1
         T = np.asarray(T_world_cvcam, np.float64)
+        self._frame = {"depth": depth.copy(), "T": T, "t": now,
+                       "K": np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], np.float64)}
         with self._lock:
             if self._kf:
                 last = self._kf[-1]["T"]
@@ -214,6 +244,8 @@ class Reconstructor:
                 self._fill = b""
                 self._floor_img = None
                 self.registry = {}
+                self._kfm = None
+            self.status["poses"] = {}
             self.status["objects"] = []
             self.status["fill"] = None
             self.status["floor_photo"] = None
@@ -238,6 +270,10 @@ class Reconstructor:
             raw, _, _, off = _blob_arrays(b, off + 4)
             V, T, _, off = _blob_arrays(b, off)
             if i == oid:
+                M = self._rel(oid)                      # moved by the tracker since this blob was made
+                if M is not None:
+                    V, raw = V @ M[:3, :3].T + M[:3, 3], raw @ M[:3, :3].T + M[:3, 3]
+                    return V, T, raw, float(V[:, 1].min())
                 return V, T, raw, (self.floor_y or 0.0) + info["support_mm"] / 1000
         return None
 
@@ -278,6 +314,235 @@ class Reconstructor:
         self.status["cleared_px"] = n
         return n
 
+    # ---- [ours] live 6-DoF tracking of committed objects
+    def _rel(self, oid):
+        """4×4 move of a committed object since its mesh in /recon_objects was made, or None."""
+        r = self.registry.get(oid)
+        if r is None or "mesh0" not in r or "blob_pose" not in r:
+            return None
+        return r["pose"] @ np.linalg.inv(r["blob_pose"])
+
+    @staticmethod
+    def _pose_at(r, t):
+        """pose of a committed object at time t (its tracking history; before the first entry: the first)"""
+        h = r["hist"]
+        for th, P in reversed(h):
+            if th <= t + 1e-3:
+                return P
+        return h[0][1]
+
+    @staticmethod
+    def _tree(r):
+        from scipy.spatial import cKDTree
+        if r.get("_tree") is None:
+            V = r["mesh0"][0]
+            r["_tree"] = cKDTree(V)
+            r["_box"] = (V.min(0), V.max(0))
+            r["_S0"] = V[np.random.default_rng(0).choice(len(V), min(len(V), 1500), replace=False)]
+        return r["_tree"]
+
+    def _active(self):
+        return [(oid, r) for oid, r in list(self.registry.items())
+                if r.get("committed") and "mesh0" in r and not r.get("lost")]
+
+    def _track_loop(self):
+        while True:
+            time.sleep(1.0 / TRACK_HZ)
+            try:
+                self.track_now()
+            except Exception as e:
+                self.status["track_error"] = str(e)
+
+    def track_now(self):
+        """Newest frame → every committed object's pose (ICP of its frozen mesh to the depth points around it)."""
+        with self._track_lock:
+            self._track_now()
+
+    def _track_now(self):
+        f = self._frame
+        if f is None or f is self._tracked or self.floor_y is None:
+            return
+        self._tracked = f
+        regs = self._active()
+        if not regs:
+            return
+        from objmodel import track
+        t0 = time.time()
+        import cv2
+        dep, K, T = f["depth"], f["K"], f["T"]
+        h, w = dep.shape
+        Tcw = np.linalg.inv(T)
+        # "seen through" uses the 3×3 minimum depth: a model point on the silhouette next to the background is not
+        # evidence against it (the plain depth made a carried strawberry fail its check while being put down)
+        dmin = cv2.erode(np.where(dep > 0, dep, 1e3).astype(np.float32), np.ones((3, 3), np.uint8))
+        for oid, r in regs:
+            self._tree(r)
+        n_ok = 0
+        for oid, r in regs:
+            pose = r["pose"]
+            vel = r.get("vel") if f["t"] - r.get("t_upd", 0) < 0.6 else None
+            pred = vel @ pose if vel is not None else pose           # constant velocity while carried
+            S = r["_S0"] @ pred[:3, :3].T + pred[:3, 3]
+            pc = S @ Tcw[:3, :3].T + Tcw[:3, 3]
+            z = pc[:, 2]
+            front = z > 0.05
+            zs = np.where(front, z, 1)
+            u = K[0, 0] * pc[:, 0] / zs + K[0, 2]
+            v = K[1, 1] * pc[:, 1] / zs + K[1, 2]
+            inimg = front & (u >= 0) & (u < w) & (v >= 0) & (v < h)
+            if inimg.sum() < 20:
+                continue                                              # out of view: pose kept
+            ui, vi = u[inimg].astype(int), v[inimg].astype(int)
+            d, dm_ = dep[vi, ui], dmin[vi, ui]
+            through = ((dm_ > z[inimg] + 0.02) & (dm_ < 1e2)).sum()
+            on = (np.abs(d - z[inimg]) < 0.01).sum()
+
+            def miss():                                               # not found: the views see past where it was
+                if through + on > 30 and through > 0.6 * (through + on):
+                    r["miss"] = r.get("miss", 0) + 1
+                    if r["miss"] >= LOST_MISSES:
+                        r["lost"] = True
+            u0, u1 = max(int(ui.min()) - 6, 0), min(int(ui.max()) + 7, w)
+            v0, v1 = max(int(vi.min()) - 6, 0), min(int(vi.max()) + 7, h)
+            sd = dep[v0:v1, u0:u1]
+            vv, uu = np.mgrid[v0:v1, u0:u1]
+            ok = sd > 0.05
+            P = np.stack([(uu[ok] - K[0, 2]) / K[0, 0] * sd[ok], (vv[ok] - K[1, 2]) / K[1, 1] * sd[ok], sd[ok]], -1)
+            P = P @ T[:3, :3].T + T[:3, 3]
+            lo, hi = S.min(0) - TRACK_GATE_M, S.max(0) + TRACK_GATE_M
+            P = P[np.all((P > lo) & (P < hi), axis=1) & (P[:, 1] > self.floor_y + 0.003)]
+            for oj, rj in regs:                                       # points on a neighbour (the board under it)
+                if oj == oid or not len(P):
+                    continue
+                Pj = rj["pose"]
+                Q = (P - Pj[:3, 3]) @ Pj[:3, :3]
+                blo, bhi = rj["_box"]
+                near = np.all((Q > blo - EXPLAIN_M) & (Q < bhi + EXPLAIN_M), axis=1)
+                if near.any():
+                    dj = rj["_tree"].query(Q[near], distance_upper_bound=EXPLAIN_M)[0]
+                    drop = np.zeros(len(P), bool)
+                    drop[np.nonzero(near)[0][dj < np.inf]] = True
+                    P = P[~drop]
+            if len(P) < TRACK_MIN_PTS:
+                miss()
+                continue
+            Q = (P - pred[:3, 3]) @ pred[:3, :3]
+            dm = r["_tree"].query(Q, distance_upper_bound=TRACK_GATE_M)[0]
+            obs = P[dm < np.inf]
+            if len(obs) < TRACK_MIN_PTS:
+                miss()
+                continue
+            Q0 = (obs - pose[:3, 3]) @ pose[:3, :3]                   # the observation against the pose it has
+            d0 = r["_tree"].query(Q0, distance_upper_bound=0.05)[0]
+            r["res_mm"] = round(float(np.median(d0)) * 1000, 2)
+            if np.median(d0) < STILL_MED_M and (d0 < STILL_IN_M).mean() > STILL_SHARE:
+                r["miss"], r["last"], r["vel"] = 0, time.time(), None
+                n_ok += 1
+                continue                                              # still: explained as it is
+            Vw = r["mesh0"][0] @ pred[:3, :3].T + pred[:3, 3]
+            T1, _, _ = track(Vw, obs, dist=0.02)
+            T2, fit, rmse = track(Vw @ T1[:3, :3].T + T1[:3, 3], obs, dist=0.008)
+            new = T2 @ T1 @ pred
+            # [ours] the fitted model must agree with the view: a model slid along the board (planar points pull a
+            # point-to-point ICP sideways) has its upper part where the camera sees the board behind it
+            pc2 = S @ (Tcw @ new @ np.linalg.inv(pred))[:3, :3].T + (Tcw @ new @ np.linalg.inv(pred))[:3, 3]
+            z2 = pc2[:, 2]
+            f2 = z2 > 0.05
+            u2 = K[0, 0] * pc2[:, 0] / np.where(f2, z2, 1) + K[0, 2]
+            v2 = K[1, 1] * pc2[:, 1] / np.where(f2, z2, 1) + K[1, 2]
+            in2 = f2 & (u2 >= 0) & (u2 < w) & (v2 >= 0) & (v2 < h)
+            d2 = dep[v2[in2].astype(int), u2[in2].astype(int)]
+            m2 = dmin[v2[in2].astype(int), u2[in2].astype(int)]
+            th2 = int(((m2 > z2[in2] + 0.02) & (m2 < 1e2)).sum())
+            on2 = int((np.abs(d2 - z2[in2]) < 0.01).sum())
+            if fit < TRACK_MIN_FIT or rmse > TRACK_MAX_RMSE_M or th2 > 0.3 * max(th2 + on2, 1):
+                miss()
+                continue
+            d1 = r["_tree"].query((obs - new[:3, 3]) @ new[:3, :3], distance_upper_bound=0.05)[0]
+            m0, m1 = float(np.median(d0)), float(np.median(d1))
+            if not (m1 <= BETTER_REL * m0 and m0 - m1 >= BETTER_ABS_M):
+                r["miss"], r["last"] = 0, time.time()
+                n_ok += 1
+                continue                                              # not clearly better: it did not move
+            D = new @ np.linalg.inv(pose)
+            r["miss"], r["last"], r["fit"] = 0, time.time(), round(float(fit), 3)
+            n_ok += 1
+            if np.linalg.norm(D[:3, 3]) < TRACK_DEAD_M and _angle_deg(D[:3, :3], np.eye(3)) < TRACK_DEAD_DEG:
+                r["vel"] = None
+                continue
+            r["vel"], r["pose"], r["t_upd"] = D, new, f["t"]
+            r["hist"].append((f["t"], new))
+            if len(r["hist"]) > 400:
+                r["hist"] = r["hist"][:1] + r["hist"][-399:]
+        poses = {}
+        for oid, r in regs:
+            M = self._rel(oid)
+            if M is not None:
+                poses[str(oid)] = np.round(M, 5).ravel().tolist()
+        for o in self.status.get("objects") or []:
+            r = self.registry.get(o["id"])
+            if r is not None and "blob_centre" in r and str(o["id"]) in poses:
+                M = self._rel(o["id"])
+                o["centre"] = (M[:3, :3] @ r["blob_centre"] + M[:3, 3]).round(3).tolist()
+                o["track_fit"] = r.get("fit")
+        self.status["poses"] = poses
+        self.status["track_ms"] = round((time.time() - t0) * 1000, 1)
+        self.status["tracked"] = n_ok
+
+    def _mask_committed(self, kfs):
+        """keyframes with every committed object's pixels zeroed (its model at its pose at the keyframe's time)"""
+        regs = self._active()
+        if not regs:
+            return kfs
+        for _, r in regs:
+            self._tree(r)
+        out = []
+        for k in kfs:
+            dep, K, T = k["depth"], k["K"], k["T"]
+            if k.get("_Pd") is not dep:                               # back-projection cached per depth image
+                h, w = dep.shape
+                vv, uu = np.mgrid[0:h, 0:w]
+                k["_P"] = np.stack([(uu - K[0, 2]) / K[0, 0] * dep, (vv - K[1, 2]) / K[1, 1] * dep, dep], -1).reshape(-1, 3) @ T[:3, :3].T + T[:3, 3]
+                k["_Pd"] = dep
+            P, valid = k["_P"], dep.ravel() > 0.05
+            m = np.zeros(len(P), bool)
+            for _, r in regs:
+                Pj = self._pose_at(r, k["t"])
+                lo, hi = r["_box"]
+                Q = (P - Pj[:3, 3]) @ Pj[:3, :3]
+                cand = valid & np.all((Q > lo - MASK_DIST_M) & (Q < hi + MASK_DIST_M), axis=1)
+                if cand.any():
+                    d = r["_tree"].query(Q[cand], distance_upper_bound=MASK_DIST_M)[0]
+                    m[np.nonzero(cand)[0][d < np.inf]] = True
+            if m.any():
+                k = {**k, "depth": np.where(m.reshape(dep.shape), 0, dep).astype(np.float32)}
+            out.append(k)
+        return out
+
+    def _explained(self, pv):
+        """share of a piece's vertices within RESID_M of some committed model (at its pose now)"""
+        best = 0.0
+        for _, r in self._active():
+            self._tree(r)
+            P = r["pose"]
+            Q = (pv - P[:3, 3]) @ P[:3, :3]
+            d = r["_tree"].query(Q, distance_upper_bound=RESID_M)[0]
+            best = max(best, float((d < np.inf).mean()))
+        return best
+
+    def _resting_on(self, lo, hi):
+        """a committed object right under the piece's footprint: its top y there (support), else None"""
+        for _, r in self._active():
+            P = r["pose"]
+            V = r["mesh0"][0] @ P[:3, :3].T + P[:3, 3]
+            inxz = (V[:, 0] > lo[0]) & (V[:, 0] < hi[0]) & (V[:, 2] > lo[2]) & (V[:, 2] < hi[2])
+            if inxz.sum() < 10:
+                continue
+            top = float(V[inxz, 1].max())
+            if lo[1] - 0.025 < top < lo[1] + 0.01:
+                return top
+        return None
+
     def mesh_bytes(self):
         with self._lock:
             return self._mesh
@@ -300,6 +565,15 @@ class Reconstructor:
 
     def _rebuild(self, kfs):
         t0 = time.time()
+        # [ours] committed objects that never moved and are now seen from much more of the horizon: completed once
+        # more (un-committed for this rebuild; still in place, so every keyframe agrees with them)
+        for oid, r in self._active():
+            if len(r["hist"]) == 1 and _azimuth_coverage(r["raw0"][0], kfs) >= r["cov"] + REFINE_COVER_DEG:
+                r["committed"] = False
+                r["_tree"] = None
+        kfs = self._mask_committed(kfs)
+        self._kfm = kfs
+        self.status["mask_ms"] = round((time.time() - t0) * 1000, 1)
         vbg = o3d.t.geometry.VoxelBlockGrid(
             attr_names=("tsdf", "weight", "color"), attr_dtypes=(o3c.float32, o3c.float32, o3c.float32),
             attr_channels=((1), (1), (3)), voxel_size=VOXEL_M, block_resolution=BLOCK_RES,
@@ -366,24 +640,44 @@ class Reconstructor:
         out, info, prev = [], [], self._prev_obj
         obj_pts, geo_pts, geo_mesh = {}, [], []
         pieces = []
-        for c in np.nonzero(cnt >= SPLIT_MIN_TRIS)[0]:
-            pts = sv[np.unique(st[ids == c])]
+        sst = {"pieces": 0, "too_big": 0, "floating": 0, "explained": 0, "tsdf_fail": 0, "kept": 0}
+        groups = [np.nonzero(ids == c)[0] for c in np.nonzero(cnt >= SPLIT_MIN_TRIS)[0]]
+        for g in groups:
+            sst["pieces"] += 1
+            pts = sv[np.unique(st[g])]
             lo, hi = pts.min(axis=0), pts.max(axis=0)
             w = max(hi[0] - lo[0], hi[2] - lo[2])
-            if w > SPLIT_MAX_W_M or hi[1] - fy > SPLIT_MAX_H_M or lo[1] - fy > SPLIT_ABOVE_M + SPLIT_TOUCH_M:
-                continue                                 # wall / furniture / floating piece: background
-            cut[cand_idx[ids == c]] = True
+            if w > SPLIT_MAX_W_M or hi[1] - fy > SPLIT_MAX_H_M:
+                sst["too_big"] += 1
+                continue                                 # wall / furniture
+            on_obj = None
+            if lo[1] - fy > SPLIT_ABOVE_M + SPLIT_TOUCH_M:
+                on_obj = self._resting_on(lo, hi)        # [ours] standing on a committed (masked) board
+                if on_obj is None:
+                    sst["floating"] += 1
+                    continue                             # floating piece: background
+            if self._explained(pts) >= RESID_SHARE:
+                sst["explained"] += 1
+                cut[cand_idx[g]] = True                  # the rim of a tracked object left by the mask
+                continue
+            cut[cand_idx[g]] = True
             box_lo, box_hi = lo - OBJ_MARGIN_M, hi + OBJ_MARGIN_M
             box_lo[1] = fy + 0.002
             try:
                 _, stt, (ov, otri, ocol) = self.object_tsdf(box_lo, box_hi, arrays=True, core=(lo, hi))
-            except Exception:
+            except Exception as e:
+                sst["tsdf_fail"] += 1
+                sst["tsdf_error"] = str(e)
                 continue
             if not len(otri):
+                sst["tsdf_fail"] += 1
                 continue
+            sst["kept"] += 1
             # [ours] a board / tray inside this piece is a support of its own: split what stands on it (3 mm mesh;
             # the 1 cm room mesh smears a 13 mm board into the floor)
             for sel, sup, cap in self._split_on_support(ov, otri, np.arange(len(otri)), fy):
+                if on_obj is not None and cap is None and sup == fy:
+                    sup = on_obj
                 T = otri[sel]
                 if cap is not None:                      # the support keeps only itself, not what stands on it
                     T = T[(ov[T][:, :, 1] <= cap).all(axis=1)]
@@ -395,24 +689,16 @@ class Reconstructor:
                 pv, pc, pt = ov[keep], ocol[keep], inv.reshape(-1, 3)
                 plo, phi = pv.min(axis=0), pv.max(axis=0)
                 centre = (plo + phi) / 2
+                if self._explained(pv) >= RESID_SHARE:
+                    continue                             # a tracked object's part (the board under a new piece)
                 pieces.append((pv, pc, pt, sup, plo, phi, centre))
+        self.status["split_stats"] = sst
         oids = self._assign_ids(pieces, prev)
         for (pv, pc, pt, sup, plo, phi, centre), oid in zip(pieces, oids):
             cov = _azimuth_coverage(pv, self._carve_kfs)
             reg = self.registry.get(oid)
-            if reg is not None and reg.get("committed") and cov < reg["cov"] + REFINE_COVER_DEG:
-                # [ours] committed object: no re-completion, only its 6-DoF pose follows the observation (ICP)
-                t1 = time.time()
-                V, Tm, C = self._track_registry(reg, pv)
-                obj_pts[oid] = pv[np.random.default_rng(0).choice(len(pv), min(len(pv), 2000), replace=False)]
-                geo_pts.append(obj_pts[oid])
-                geo_mesh.append((pv, pt, pc, sup, (V, Tm)))
-                out.append(np.array([oid], np.uint32).tobytes() + _mesh_blob(pv, pt, pc) + _mesh_blob(V, Tm, C))
-                info.append({**reg["info"], "_lo": plo.copy(), "_hi": phi.copy(), "id": int(oid), "verts": int(len(pv)),
-                             "centre": ((V.min(0) + V.max(0)) / 2).round(3).tolist(), "committed": True,
-                             "track_ms": round((time.time() - t1) * 1000, 1), "track_fit": reg.get("fit"),
-                             "_on_floor": sup == fy, "coverage_deg": cov, "_obs_c": centre.copy()})
-                continue
+            if reg is not None and reg.get("committed"):
+                continue                                 # re-found by shape (_assign_ids): emitted with the tracked ones
             comp = complete_object(pv, pc, sup)              # [ours] fill the unseen sides
             # views all around → space carving (measured best: 1.3–2.8 mm, 94–100 %); a one-sided sweep leaves the
             # back unknown and carving fills it to the box edge (a 47 mm carrot came out 69 mm) → symmetry priors
@@ -434,6 +720,24 @@ class Reconstructor:
                          "shape": comp["shape"], "dims_mm": comp["dims_mm"], "rms_mm": comp["rms_mm"], "fits_mm": comp["fits_mm"],
                          "complete_ms": comp["ms"], "support_mm": round((sup - fy) * 1000), "_on_floor": sup == fy,
                      "coverage_deg": comp.get("coverage_deg"), "_obs_c": centre.copy()})
+        # [ours] committed objects: their frozen mesh at the tracked pose (no TSDF piece, no re-completion)
+        for oid, reg in self._active():
+            P = reg["pose"]
+            pv, pt, pc = reg["raw0"]
+            pv = pv @ P[:3, :3].T + P[:3, 3]
+            V, Tm, C = reg["mesh0"]
+            V = V @ P[:3, :3].T + P[:3, 3]
+            plo, phi = pv.min(axis=0), pv.max(axis=0)
+            vc = (V.min(0) + V.max(0)) / 2
+            reg["blob_pose"], reg["blob_centre"] = P.copy(), vc
+            obj_pts[oid] = pv[np.random.default_rng(0).choice(len(pv), min(len(pv), 2000), replace=False)]
+            geo_pts.append(obj_pts[oid])
+            geo_mesh.append((pv, pt, pc, float(V[:, 1].min()), (V, Tm)))
+            out.append(np.array([oid], np.uint32).tobytes() + _mesh_blob(pv, pt, pc) + _mesh_blob(V, Tm, C))
+            info.append({**reg["info"], "_lo": plo.copy(), "_hi": phi.copy(), "id": int(oid), "verts": int(len(pv)),
+                         "centre": vc.round(3).tolist(), "committed": True, "track_fit": reg.get("fit"),
+                         "support_mm": round((float(V[:, 1].min()) - fy) * 1000), "moved": len(reg["hist"]) > 1,
+                         "_on_floor": float(V[:, 1].min()) < fy + 0.006, "_obs_c": (plo + phi) / 2})
         if self.instances is not None:
             out, info = self._merge_instances(out, info, geo_pts, geo_mesh, obj_pts, fy)
         self._commit(out, info)
@@ -476,7 +780,6 @@ class Reconstructor:
                 if "label" not in o:
                     o["label"] = self.labeler(o["id"])
         self.status["objects"] = info
-        self.object_points = obj_pts
         return np.array([len(out)], np.uint32).tobytes() + b"".join(out), fill
 
     def _floor_job(self, v, fy, must, kfs):
@@ -569,8 +872,9 @@ class Reconstructor:
         and footprint within MOVE_MATCH_M takes it (cheapest first); 3) the rest are new objects."""
         oids = [None] * len(pieces)
         C = [p[6] for p in pieces]
+        active = {oid for oid, _ in self._active()}                 # tracked: emitted from the registry, not a piece
         pairs = sorted((np.linalg.norm(q - C[k]), k, i) for k in range(len(pieces)) for i, q in prev
-                       if np.linalg.norm(q - C[k]) < 0.03)
+                       if np.linalg.norm(q - C[k]) < 0.03 and i not in active)
         used = set()
         for _, k, i in pairs:
             if oids[k] is None and i not in used:
@@ -578,12 +882,15 @@ class Reconstructor:
                 used.add(i)
         pairs = []
         for k, p in enumerate(pieces):
-            if oids[k] is not None:
-                continue
+            young = oids[k] is not None and not (self.registry.get(oids[k]) or {}).get("committed")
+            if oids[k] is not None and not young:
+                continue                     # a young (uncommitted) id may be a lost committed object seen again
             size = np.ptp(p[0], axis=0)
             for rid, r in self.registry.items():
-                if not r.get("committed") or rid in used:
+                if not r.get("committed") or rid in used or "mesh0" not in r:
                     continue
+                if not r.get("lost"):
+                    continue                                         # tracked (or out of view, kept): not this piece
                 rs = np.array(r["info"]["size_mm"]) / 1000
                 dh = size[1] / max(rs[1], 1e-3)                      # height survives any yaw
                 fp = np.sort(size[[0, 2]]) / np.maximum(np.sort(rs[[0, 2]]), 1e-3)   # footprint, yaw-free
@@ -591,50 +898,51 @@ class Reconstructor:
                 if d < MOVE_MATCH_M and 0.7 < dh < 1.4 and (0.5 < fp).all() and (fp < 2.0).all():
                     pairs.append((d / MOVE_MATCH_M + abs(np.log(dh)) + np.abs(np.log(fp)).sum(), k, rid))
         for _, k, rid in sorted(pairs):
-            if oids[k] is None and rid not in used:
+            young = oids[k] is not None and not (self.registry.get(oids[k]) or {}).get("committed")
+            if (oids[k] is None or young) and rid not in used:
+                if young:
+                    self.registry.pop(oids[k], None)
                 oids[k] = rid
                 used.add(rid)
-                self.registry[rid]["moved"] = True
+                self._relocalise(self.registry[rid], pieces[k][0])
         for k in range(len(pieces)):
             if oids[k] is None:
                 oids[k] = self._next_id
                 self._next_id += 1
         return oids
 
-    def _track_registry(self, reg, obs):
-        """ICP of the committed mesh to what is observed now (observed → model); the correction moves the model."""
+    def _relocalise(self, reg, obs):
+        """[ours] A committed object re-found by shape elsewhere (moved while unseen / lost): its pose from the observed
+        piece — top-view centre shift, then yaw hypotheses about the model centre with ICP 2 cm → 1 cm, best kept."""
+        with self._track_lock:
+            self._relocalise_locked(reg, obs)
+
+    def _relocalise_locked(self, reg, obs):
         from objmodel import track
-        V, T, C = reg["mesh"]
-        # coarse: the observed piece's top-view centre (it moved by more than the ICP reach); fine: ICP 2 cm → 1 cm
-        # (observed centre now − observed centre last time: both one-sided alike, the completed model's centre is not)
+        P = reg["pose"]
+        V = reg["mesh0"][0] @ P[:3, :3].T + P[:3, 3]
         sh = np.zeros(3)
         oc, mc = (obs.min(0) + obs.max(0)) / 2, (V.min(0) + V.max(0)) / 2
-        d = (oc - reg.get("obs_c", oc))[[0, 2]]
-        if np.linalg.norm(d) > 0.008:
-            sh[[0, 2]] = d
+        sh[[0, 2]] = (oc - reg.get("obs_c", oc))[[0, 2]]
         S0 = V[np.random.default_rng(0).choice(len(V), min(len(V), 4000), replace=False)]
-        # a moved (picked and placed) object may also have turned: yaw hypotheses about its centre, best ICP kept
-        yaws = (0, 45, 90, 135, 180, 225, 270, 315) if reg.pop("moved", False) else (0,)
         best = None
-        for yd in yaws:
+        for yd in (0, 45, 90, 135, 180, 225, 270, 315):
             a = np.radians(yd)
             R0 = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
             T0 = np.eye(4)
             T0[:3, :3] = R0
-            T0[:3, 3] = mc + sh - R0 @ mc                       # turn about the model centre, then shift
+            T0[:3, 3] = mc + sh - R0 @ mc
             S = S0 @ T0[:3, :3].T + T0[:3, 3]
-            T1, f1, _ = track(S, obs, dist=0.02)
-            S1 = S @ T1[:3, :3].T + T1[:3, 3]
-            T2, fit, rmse = track(S1, obs, dist=0.01)
+            T1, _, _ = track(S, obs, dist=0.02)
+            T2, fit, rmse = track(S @ T1[:3, :3].T + T1[:3, 3], obs, dist=0.01)
             if best is None or (fit - 20 * rmse) > best[0]:
-                best = (fit - 20 * rmse, T2 @ T1 @ T0, fit, rmse)
-        _, Tt, fit, rmse = best
+                best = (fit - 20 * rmse, T2 @ T1 @ T0, fit)
+        _, Tt, fit = best
         reg["fit"] = round(float(fit), 3)
-        if fit > TRACK_MIN_FIT and np.linalg.norm(Tt[:3, 3]) > 0.001:
-            V = V @ Tt[:3, :3].T + Tt[:3, 3]
-            reg["mesh"] = (V, T, C)
-            reg["pose"] = Tt @ reg["pose"]
-        return reg["mesh"]
+        if fit > TRACK_MIN_FIT:
+            reg["pose"] = Tt @ P
+            reg["hist"].append((time.time(), reg["pose"]))
+            reg.update(lost=False, miss=0, last=time.time(), vel=None)
 
     def _commit(self, out, info):
         """[ours] An object seen REG_STABLE rebuilds in a row with the same label (or unlabelled for longer) is committed:
@@ -644,8 +952,7 @@ class Reconstructor:
             if "_obs_c" in o and o["id"] in self.registry:
                 self.registry[o["id"]]["obs_c"] = o["_obs_c"]
             if o.get("committed"):
-                self.registry[o["id"]]["last"] = now
-                continue
+                continue                                    # "last" seen: set by the tracker
             reg = self.registry.setdefault(o["id"], {"seen": 0, "labels": []})
             reg["obs_c"] = o.get("_obs_c", np.array(o["centre"]))
             reg["seen"] += 1
@@ -658,10 +965,14 @@ class Reconstructor:
                 _, _, _, off = _blob_arrays(blob, off)          # raw TSDF mesh
                 V, T, C, _ = _blob_arrays(blob, off)            # completed mesh
                 o2 = {k: v for k, v in o.items() if not k.startswith("_")}
-                reg.update(committed=True, mesh=(V, T, C), pose=np.eye(4), cov=o.get("coverage_deg") or 0,
-                           info={**o2, "committed": True}, committed_at=time.strftime("%H:%M:%S"))
+                raw = _blob_arrays(blob, 4)[:3]
+                reg.update(committed=True, mesh0=(V, T, C), raw0=raw, pose=np.eye(4), hist=[(now, np.eye(4))],
+                           blob_pose=np.eye(4), blob_centre=(V.min(0) + V.max(0)) / 2, _tree=None, lost=False, miss=0,
+                           cov=o.get("coverage_deg") or 0, info={**o2, "committed": True},
+                           committed_at=time.strftime("%H:%M:%S"))
                 o["committed"] = True
-        for oid in [k for k, r in self.registry.items() if now - r["last"] > REG_TTL_S]:
+        for oid in [k for k, r in self.registry.items() if now - r["last"] > REG_TTL_S
+                    and (r.get("lost") or not r.get("committed"))]:
             self.registry.pop(oid)                          # gone from the scene for a while
 
     def _merge_instances(self, out, info, geo_pts, geo_mesh, obj_pts, fy):
@@ -726,7 +1037,8 @@ class Reconstructor:
                     V, F, C, st = mdl                       # the AI model asked for replaces the frozen mesh
                     pv, pt, pc, sup, _ = geo_mesh[k]
                     V, F, C = self._fuse(pv, pt, pc, {"V": V, "T": F, "C": C})   # as the completion (see below)
-                    reg.update(mesh=(V, F, C), ai=True)
+                    Pc = reg["pose"]
+                    reg.update(mesh0=((V - Pc[:3, 3]) @ Pc[:3, :3], F, C), ai=True, _tree=None)
                     reg["info"].update(shape="ai", dims_mm=(np.ptp(V, axis=0) * 1000).round(0).astype(int).tolist(), model=st)
                     out[k] = out[k][:4] + _mesh_blob(pv, pt, pc) + _mesh_blob(V, F, C)
                     info[k].update(shape="ai", dims_mm=reg["info"]["dims_mm"], model=st)
@@ -894,6 +1206,8 @@ class Reconstructor:
         t0 = time.time()
         with self._lock:
             kfs = list(self._kf[-n_kf:])
+        if self._kfm:                                     # committed objects masked out (their own tracked meshes)
+            kfs = self._kfm[-n_kf:]
         if not kfs:
             raise RuntimeError("키프레임이 없습니다")
         lo, hi = np.asarray(lo, float), np.asarray(hi, float)
