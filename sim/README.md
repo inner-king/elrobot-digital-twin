@@ -8,7 +8,7 @@
 | 테스트 결과 | 내용 | 대표 영상 |
 |---|---|---|
 | [reports/08_realistic](reports/08_realistic/README.md) | 사진으로 만든 오이를 사람처럼 4번 썰기(합성 칼 궤적), 물리 보정 + 실제 물체처럼 렌더 | `TR_cucumber_slices/mosaic_render.mp4` |
-| [reports/09_elrobot_twin](reports/09_elrobot_twin/README.md) | 디지털 트윈 복원 물체를 시뮬레이션에 올려 자르기, ElRobot 이 칼을 쥐고 복원 당근 썰기 | `robot_cut/TR_robot_carrot/kitchen_render/mosaic.mp4` |
+| [reports/09_elrobot_twin](reports/09_elrobot_twin/README.md) | 디지털 트윈 복원 물체를 시뮬레이션에 올려 자르기, 복원 주방 전체 + ElRobot 을 한 물리 장면에 넣고 칼을 쥐고 당근 썰기 | `robot_cut_full/TR_kitchen_full/kitchen_render/mosaic.mp4` |
 
 ## 흐름 한눈에
 
@@ -185,7 +185,8 @@ scripts/
   render_surface.py, make_mosaic.py    실제 물체처럼 렌더, 카메라 4대 + 힘 그래프 영상
   twin/                                09 결과용: recon_kitchen.py(이 저장소 복원 코드로 가상 주방 복원),
                                        meshfix.py, particle_check.py, robot_kin.py(ElRobot FK/IK),
-                                       make_robot_cut.py(로봇 칼질 궤적·쥐기), render_kitchen_cut.py(주방 + 로봇 렌더)
+                                       make_robot_cut.py(로봇 칼질 궤적·쥐기), sim_kitchen_cut.py(주방·로봇을 한 물리 장면에),
+                                       render_kitchen_cut.py(주방 + 로봇 렌더)
 reports/   08_realistic, 09_elrobot_twin (영상·설명. 입자 기록·메쉬 같은 큰 중간 파일은 뺐다)
 ```
 

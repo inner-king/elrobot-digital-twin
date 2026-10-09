@@ -1,0 +1,139 @@
+{
+ "wall_s_total": 1404.0,
+ "ik_ms_per_step": 4.37,
+ "T_wc": [
+  [
+   -0.9994680000000001,
+   0.032621000000000004,
+   -0.0,
+   0.28938670169699193
+  ],
+  [
+   -0.032621000000000004,
+   -0.9994680000000001,
+   -0.0,
+   -0.0286259353272165
+  ],
+  [
+   0.0,
+   0.0,
+   1.0,
+   0.020444740000000072
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ],
+ "carrot_dz_mm": 3.2582500000000736,
+ "objects": {
+  "사과": {
+   "mass_kg": 0.2,
+   "settle_move_mm": 0.7,
+   "max_move_after_settle_mm": 0.0,
+   "max_rot_after_settle_deg": 0.0
+  },
+  "냄비": {
+   "mass_kg": 1.2,
+   "settle_move_mm": 1.21,
+   "max_move_after_settle_mm": 0.0,
+   "max_rot_after_settle_deg": 0.0
+  },
+  "도마": {
+   "mass_kg": 0.8,
+   "settle_move_mm": 0.51,
+   "max_move_after_settle_mm": 0.0,
+   "max_rot_after_settle_deg": 0.0
+  },
+  "딸기": {
+   "mass_kg": 0.02,
+   "settle_move_mm": 1.71,
+   "max_move_after_settle_mm": 0.07,
+   "max_rot_after_settle_deg": 0.1
+  },
+  "바나나": {
+   "mass_kg": 0.15,
+   "settle_move_mm": 0.95,
+   "max_move_after_settle_mm": 0.0,
+   "max_rot_after_settle_deg": 0.0
+  },
+  "머그": {
+   "mass_kg": 0.35,
+   "settle_move_mm": 1.67,
+   "max_move_after_settle_mm": 0.0,
+   "max_rot_after_settle_deg": 0.0
+  }
+ },
+ "sleeping": {
+  "slept_at_step": {
+   "도마": [
+    86
+   ],
+   "사과": [
+    89
+   ],
+   "냄비": [
+    94
+   ],
+   "머그": [
+    110
+   ],
+   "바나나": [
+    111
+   ],
+   "딸기": [
+    298
+   ]
+  },
+  "woke": []
+ },
+ "robot": {
+  "track_err_mm": {
+   "max": 0.99,
+   "mean": 0.16,
+   "max_after_0.2s": 0.99
+  },
+  "ik_err_max": {
+   "mm": 0.0,
+   "deg": 0.0
+  },
+  "max_torque_ratio": {
+   "rev_motor_01": 1.0,
+   "rev_motor_02": 0.47,
+   "rev_motor_03": 0.53,
+   "rev_motor_04": 0.31,
+   "rev_motor_05": 0.22,
+   "rev_motor_06": 1.0,
+   "rev_motor_07": 1.0,
+   "rev_motor_08": 0.0,
+   "rev_motor_08_1": 0.0,
+   "rev_motor_08_2": 0.0
+  },
+  "max_torque_ratio_after_0.2s": {
+   "rev_motor_01": 1.0,
+   "rev_motor_02": 0.47,
+   "rev_motor_03": 0.53,
+   "rev_motor_04": 0.31,
+   "rev_motor_05": 0.22,
+   "rev_motor_06": 1.0,
+   "rev_motor_07": 1.0,
+   "rev_motor_08": 0.0,
+   "rev_motor_08_1": 0.0,
+   "rev_motor_08_2": 0.0
+  },
+  "kp": {
+   "rev_motor_01": 1762.44,
+   "rev_motor_02": 1861.48,
+   "rev_motor_03": 1769.21,
+   "rev_motor_04": 1702.62,
+   "rev_motor_05": 1580.82,
+   "rev_motor_06": 1596.62,
+   "rev_motor_07": 1580.23,
+   "rev_motor_08": 1579.14,
+   "rev_motor_08_1": 1776.41,
+   "rev_motor_08_2": 1776.41
+  }
+ }
+}
