@@ -19,7 +19,10 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent / "r3ds_sdk"))
-from sdk import IPhoneSensorClient  # noqa: E402  (personal-use SDK, see r3ds_sdk/SOURCE.txt)
+try:
+    from sdk import IPhoneSensorClient  # noqa: E402  (personal-use SDK, not in the repo: README "iPhone 스트림 SDK")
+except ImportError:                     # no SDK: the virtual camera still works, USB / WiFi report it
+    IPhoneSensorClient = None
 from recon import Reconstructor  # noqa: E402
 from rawlog import RawRecorder  # noqa: E402
 
@@ -98,7 +101,7 @@ class CameraStream:
             cfg = json.loads(CONFIG_FILE.read_text())
         except Exception:
             cfg = {}
-        self.status.update(link=cfg.get("link", "usb"), host=cfg.get("host", ""), stage="시작", usb_devices=[],
+        self.status.update(link=cfg.get("link", "usb" if IPhoneSensorClient else "virtual"), host=cfg.get("host", ""), stage="시작", usb_devices=[],
                            virtual_hidden=[], virtual_scene=cfg.get("virtual_scene", "kitchen"), virtual_objects=[])
         self._virtual = None
         # [ours] camera session: +1 for every new camera client (or a changed connection) — the physics world built
@@ -147,6 +150,8 @@ class CameraStream:
             return client
         self._virtual = None
         self.detect.virtual = None
+        if IPhoneSensorClient is None:
+            raise RuntimeError("iPhone SDK 없음 (README의 'iPhone 스트림 SDK' 참고) — 가상 카메라는 쓸 수 있음")
         if self.status["link"] == "wifi":
             host = self.status.get("host") or ""
             if not host:
