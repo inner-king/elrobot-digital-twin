@@ -29,7 +29,7 @@
 화면: 물체 클릭 → 반투명 목표 + 기즈모 (W 이동 · E 회전) → Enter / '옮기기 실행'이면 로봇이 집어서 목표에 놓습니다. 로봇·바닥 클릭은 정합 기즈모.
 
 파지 기능은 이 저장소 밖의 형제 폴더를 읽습니다: `../taco_tools` (grasp_transfer.py), `../elrobot_mujoco` (elrobot.xml, pick_demo.py), `../taco_viewer/robot/gripper.json`.
-주방 장면 메시(YCB CC BY 4.0, Objaverse CC BY), 모델 가중치(YOLOE — AGPL-3.0, MobileCLIP, PromptDA, TripoSR)는 포함하지 않습니다 (`assets_kitchen/`, `models/`, `third_party/`).
+주방 장면 메시(YCB CC BY 4.0, Objaverse CC BY — `fetch_kitchen_assets.py`로 받기), 모델 가중치(YOLOE — AGPL-3.0, MobileCLIP, PromptDA, TripoSR)는 포함하지 않습니다 (`assets_kitchen/`, `models/`, `third_party/`).
 
 관절 각도 매핑은 norma-core station-viewer와 같습니다: `p = (pos − min) / (max − min)`, `angle = lower + p · (upper − lower)` (URDF 관절 한계).
 
@@ -53,6 +53,22 @@ mkdir -p camera/r3ds_sdk && cp -R /tmp/pathon/software/iphone_sensor_suite/Recor
 ```
 
 SDK가 없으면 카메라 패널만 비활성화되고 로봇 콘솔은 그대로 동작합니다.
+
+### 가상 주방 메시 (원래 출처에서 받기)
+
+가상 카메라의 주방 장면(도마 · 칼 · 당근 · 딸기 · 머그 · 바나나 · 사과 · 냄비)은 YCB(CC BY 4.0)와 Objaverse/Sketchfab(CC BY) 메시를 씁니다.
+저장소에는 넣지 않고 원래 출처에서 받습니다 (약 55 MB, 출처 · 저작자는 `assets_kitchen/*/CREDITS*`).
+
+```bash
+uv run --python 3.12 --with objaverse python fetch_kitchen_assets.py
+```
+
+메시가 없으면 가상 카메라는 상자 장면으로 동작합니다.
+
+### 실물 없이 가상으로만 쓰기
+
+- 로봇: `시스템` 패널의 로봇 연결에서 `가상 로봇` 선택 (`robot.json`의 `"source": "virtual"`)
+- 카메라: 카메라 패널 연결에서 `가상 카메라` 선택 → 주방 장면이 복원되고, 물리 월드(`grasp/world.py`)가 복원된 물체로 가상 복제를 만듭니다
 
 ## 실행
 
